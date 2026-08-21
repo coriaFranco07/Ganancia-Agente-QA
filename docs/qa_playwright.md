@@ -40,13 +40,14 @@ $env:AUDITORIA_QA_EXCEL_DIR="C:\Users\Lenovo Ideapad\Downloads"
 npm run qa:playwright:demo
 ```
 
-Ese modo abre el navegador, carga el formulario `QA - Pantalla 1`, guarda el caso, sube el Excel en `Cargar Excel` y valida el resultado. Por defecto corre lento para poder ver cada paso.
+Ese modo abre el navegador, carga el formulario `QA - Pantalla 1`, guarda el caso, sube el Excel en `Cargar Excel` y valida el resultado. Por defecto corre lento para poder ver cada paso. Al final muestra un cartel visual con el resultado QA y espera 15 segundos antes de cerrar.
 
 Para hacerlo aun mas lento:
 
 ```powershell
 $env:PLAYWRIGHT_SLOWMO_MS="2600"
 $env:PLAYWRIGHT_DEMO_PAUSE_MS="1800"
+$env:PLAYWRIGHT_DEMO_FINAL_PAUSE_MS="25000"
 npm run qa:playwright:demo
 ```
 

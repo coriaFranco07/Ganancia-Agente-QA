@@ -25,6 +25,7 @@ const forzarChrome = process.argv.includes('--chrome') || process.env.PLAYWRIGHT
 const headless = modoDemo ? false : process.env.PLAYWRIGHT_HEADLESS !== 'false';
 const slowMoMs = Number(process.env.PLAYWRIGHT_SLOWMO_MS ?? (modoMuyLento ? 2600 : modoDemo ? 1800 : headless ? 0 : 100));
 const demoPauseMs = Number(process.env.PLAYWRIGHT_DEMO_PAUSE_MS ?? (modoMuyLento ? 1800 : modoDemo ? 900 : 0));
+const demoFinalPauseMs = Number(process.env.PLAYWRIGHT_DEMO_FINAL_PAUSE_MS ?? (modoMuyLento ? 25000 : modoDemo ? 15000 : 0));
 const cargarFormularioQa = modoDemo || process.env.AUDITORIA_QA_CARGAR_FORM === 'true';
 
 const capturas = [];
@@ -112,7 +113,14 @@ async function ejecutarCaso(caso) {
     const snapshotId = extraerSnapshotId(page.url());
     const analisis = await leerAnalisis(snapshotId);
     const verificaciones = validarAssertions(caso, analisis);
+    await mostrarResultadoDemo({
+      estado: 'verde',
+      caso,
+      detalle: `${verificaciones.length} assertion(s) OK`,
+      verificaciones,
+    });
     await tomarCaptura(`${casoSeguro}-resultado`);
+    await pausaFinalDemo();
 
     return {
       estado: 'verde',
@@ -123,7 +131,14 @@ async function ejecutarCaso(caso) {
       detalle: `${verificaciones.length} assertion(s) OK`,
     };
   } catch (error) {
+    await mostrarResultadoDemo({
+      estado: 'rojo',
+      caso,
+      detalle: detalleError(error),
+      verificaciones: [],
+    }).catch(() => undefined);
     await tomarCaptura(`${casoSeguro}-error`).catch(() => undefined);
+    await pausaFinalDemo().catch(() => undefined);
     return {
       estado: 'rojo',
       caso: caso.id,
@@ -431,6 +446,160 @@ async function tomarCaptura(nombre) {
   return destino;
 }
 
+async function mostrarResultadoDemo({ estado, caso, detalle, verificaciones }) {
+  if (!modoDemo && demoFinalPauseMs <= 0) return;
+
+  const filas = verificaciones.map((verificacion) => ({
+    campo: texto(verificacion.campo),
+    esperado: String(verificacion.esperado),
+    actual: String(verificacion.actual),
+    tolerancia: verificacion.tolerancia === null ? '-' : String(verificacion.tolerancia),
+  }));
+
+  await page.evaluate((data) => {
+    document.getElementById('qa-playwright-final-overlay')?.remove();
+
+    const verde = data.estado === 'verde';
+    const overlay = document.createElement('section');
+    overlay.id = 'qa-playwright-final-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '24px';
+    overlay.style.zIndex = '2147483647';
+    overlay.style.display = 'grid';
+    overlay.style.placeItems = 'center';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.fontFamily = 'Inter, Arial, sans-serif';
+
+    const card = document.createElement('div');
+    card.style.width = 'min(760px, calc(100vw - 48px))';
+    card.style.border = `3px solid ${verde ? '#22c55e' : '#ef4444'}`;
+    card.style.borderRadius = '16px';
+    card.style.background = 'rgba(255,255,255,0.98)';
+    card.style.boxShadow = '0 28px 90px rgba(15, 23, 42, 0.28)';
+    card.style.padding = '26px';
+    card.style.color = '#0f172a';
+
+    const estado = document.createElement('div');
+    estado.textContent = verde ? 'QA VERDE' : 'QA ROJO';
+    estado.style.display = 'inline-flex';
+    estado.style.alignItems = 'center';
+    estado.style.height = '34px';
+    estado.style.padding = '0 14px';
+    estado.style.borderRadius = '999px';
+    estado.style.background = verde ? '#dcfce7' : '#fee2e2';
+    estado.style.color = verde ? '#166534' : '#991b1b';
+    estado.style.fontSize = '14px';
+    estado.style.fontWeight = '900';
+    card.appendChild(estado);
+
+    const titulo = document.createElement('h2');
+    titulo.textContent = verde ? 'El caso pasó correctamente' : 'El caso falló';
+    titulo.style.margin = '16px 0 6px';
+    titulo.style.fontSize = '30px';
+    titulo.style.lineHeight = '1.1';
+    titulo.style.fontWeight = '950';
+    card.appendChild(titulo);
+
+    const descripcion = document.createElement('p');
+    descripcion.textContent = `Caso ${data.casoId} - ${data.detalle}`;
+    descripcion.style.margin = '0 0 18px';
+    descripcion.style.fontSize = '15px';
+    descripcion.style.color = '#475569';
+    descripcion.style.fontWeight = '750';
+    card.appendChild(descripcion);
+
+    const resumen = document.createElement('div');
+    resumen.style.display = 'grid';
+    resumen.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
+    resumen.style.gap = '10px';
+    resumen.style.marginBottom = '18px';
+    for (const item of [
+      ['Dataset', data.dataset],
+      ['Período', data.periodo],
+      ['Excel', data.excel],
+    ]) {
+      const box = document.createElement('div');
+      box.style.border = '1px solid #dbeafe';
+      box.style.borderRadius = '10px';
+      box.style.padding = '10px 12px';
+      box.style.background = '#f8fbff';
+
+      const label = document.createElement('div');
+      label.textContent = item[0];
+      label.style.fontSize = '11px';
+      label.style.fontWeight = '900';
+      label.style.color = '#64748b';
+      label.style.textTransform = 'uppercase';
+      box.appendChild(label);
+
+      const value = document.createElement('div');
+      value.textContent = item[1] || '-';
+      value.style.marginTop = '4px';
+      value.style.fontSize = '13px';
+      value.style.fontWeight = '900';
+      value.style.overflowWrap = 'anywhere';
+      box.appendChild(value);
+
+      resumen.appendChild(box);
+    }
+    card.appendChild(resumen);
+
+    if (data.filas.length > 0) {
+      const table = document.createElement('table');
+      table.style.width = '100%';
+      table.style.borderCollapse = 'collapse';
+      table.style.fontSize = '13px';
+
+      const header = document.createElement('tr');
+      for (const tituloColumna of ['Campo', 'Esperado', 'Actual', 'Tolerancia']) {
+        const th = document.createElement('th');
+        th.textContent = tituloColumna;
+        th.style.textAlign = 'left';
+        th.style.padding = '9px 10px';
+        th.style.borderBottom = '1px solid #cbd5e1';
+        th.style.color = '#334155';
+        header.appendChild(th);
+      }
+      table.appendChild(header);
+
+      for (const fila of data.filas) {
+        const tr = document.createElement('tr');
+        for (const valor of [fila.campo, fila.esperado, fila.actual, fila.tolerancia]) {
+          const td = document.createElement('td');
+          td.textContent = valor;
+          td.style.padding = '10px';
+          td.style.borderBottom = '1px solid #e2e8f0';
+          td.style.fontWeight = '800';
+          td.style.overflowWrap = 'anywhere';
+          tr.appendChild(td);
+        }
+        table.appendChild(tr);
+      }
+      card.appendChild(table);
+    }
+
+    const pie = document.createElement('p');
+    pie.textContent = `Esta pantalla se mantiene ${Math.round(data.pausaMs / 1000)} segundos antes de cerrar el navegador.`;
+    pie.style.margin = '18px 0 0';
+    pie.style.color = '#64748b';
+    pie.style.fontSize = '12px';
+    pie.style.fontWeight = '800';
+    card.appendChild(pie);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }, {
+    estado,
+    casoId: texto(caso.id),
+    dataset: texto(caso.dataset_codigo),
+    periodo: texto(caso.periodo),
+    excel: texto(caso.archivo?.nombre),
+    detalle,
+    filas,
+    pausaMs: demoFinalPauseMs,
+  });
+}
+
 async function llenarInput(name, valor) {
   const input = page.locator(`input[name="${name}"]`);
   await input.scrollIntoViewIfNeeded();
@@ -470,6 +639,11 @@ async function elegirSelect(name, valor, etiqueta = '') {
 async function pausaDemo(factor = 1) {
   if (!demoPauseMs || factor <= 0) return;
   await page.waitForTimeout(Math.round(demoPauseMs * factor));
+}
+
+async function pausaFinalDemo() {
+  if (!demoFinalPauseMs) return;
+  await page.waitForTimeout(demoFinalPauseMs);
 }
 
 async function requestJson(url, mensaje) {
