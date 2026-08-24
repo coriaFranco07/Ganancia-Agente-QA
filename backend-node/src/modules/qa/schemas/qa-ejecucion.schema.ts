@@ -24,7 +24,7 @@ export class QaEjecucion {
   @Prop()
   finalizado_en?: string;
 
-  @Prop()
+  @Prop({ type: Number, default: null })
   exit_code?: number | null;
 
   @Prop()

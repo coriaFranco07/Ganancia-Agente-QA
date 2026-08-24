@@ -12,6 +12,7 @@ Este flujo ejecuta casos creados desde el frontend en `QA > Pantalla 1`.
 6. El runner busca ese Excel en una carpeta local configurable.
 7. En modo demo, Playwright vuelve a cargar el caso desde la UI `QA > Pantalla 1` para mostrar el alta del formulario.
 8. Playwright carga el Excel desde la UI, espera el analisis y valida las assertions contra el JSON real del snapshot.
+9. Las ejecuciones iniciadas desde la pantalla se guardan en MongoDB, coleccion `qa_ejecuciones`.
 
 ## Requisitos
 
@@ -45,6 +46,16 @@ npm run qa:playwright:demo
 ```
 
 Ese modo abre el navegador, carga el formulario `QA - Pantalla 1`, guarda el caso, sube el Excel en `Cargar Excel` y valida el resultado. Por defecto corre lento para poder ver cada paso. Al final muestra un cartel visual con el resultado QA y espera 15 segundos antes de cerrar.
+
+## Desde la pantalla
+
+En `QA > Pantalla 1`, la tabla `Operacion QA` permite ejecutar un caso puntual sin tocar la terminal:
+
+- `Start`: ejecuta el caso en modo rapido.
+- `Demo`: ejecuta el caso con navegador visible y pasos lentos.
+- `Ver resultado`: muestra el estado, detalle y ruta de evidencia de la ultima corrida.
+
+El backend llama internamente al mismo runner, seteando `AUDITORIA_QA_CASE` con el ID de la fila elegida. Por eso Playwright no elige un caso al azar: ejecuta el caso del boton presionado.
 
 Para hacerlo aun mas lento:
 

@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
-import { forkJoin } from 'rxjs';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription, forkJoin, timer } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 
 type EstadoEsperado = 'validado' | 'observado' | 'pendiente';
+type ModoQaEjecucion = 'rapido' | 'demo';
+type EstadoQaEjecucion = 'corriendo' | 'verde' | 'rojo';
 type CampoResultado =
   | 'calculo.retencion_excel'
   | 'calculo.retencion_calculada'
@@ -96,6 +98,21 @@ interface CasoGuardadoLegacy {
   id: string;
   creadoEn: string;
   payload: Record<string, unknown>;
+}
+
+interface QaEjecucionPayload {
+  id: string;
+  caso_id: string;
+  modo: ModoQaEjecucion;
+  estado: EstadoQaEjecucion;
+  iniciado_en: string;
+  finalizado_en?: string;
+  exit_code?: number | null;
+  detalle?: string;
+  evidencia_path?: string;
+  resultado?: Record<string, unknown> | null;
+  stdout_tail?: string;
+  stderr_tail?: string;
 }
 
 @Component({
@@ -280,10 +297,18 @@ interface CasoGuardadoLegacy {
       <mat-card class="panel casos-panel">
         <div class="panel-header">
           <div>
-            <h2>Casos guardados</h2>
-            <p>Casos activos disponibles para el runner Playwright.</p>
+            <h2>Operación QA</h2>
+            <p>Casos activos, ejecución Playwright y resultado de la última corrida.</p>
           </div>
-          <span *ngIf="cargandoCasos" class="estado-carga">Cargando...</span>
+          <button
+            mat-stroked-button
+            type="button"
+            class="refresh-btn"
+            [disabled]="cargandoCasos || cargandoEjecuciones"
+            (click)="refrescarOperacion()">
+            <mat-icon>refresh</mat-icon>
+            Actualizar
+          </button>
         </div>
 
         <div *ngIf="!cargandoCasos && casos.length === 0" class="empty-state">
@@ -291,20 +316,92 @@ interface CasoGuardadoLegacy {
           <span>Sin casos guardados todavía.</span>
         </div>
 
-        <div *ngFor="let caso of casos; trackBy: trackByCaso" class="caso-row">
-          <button type="button" class="caso-main" (click)="cargarCaso(caso)">
-            <mat-icon>assignment</mat-icon>
-            <span>
-              <strong>{{ caso.id }}</strong>
-              <small>{{ caso.dataset_codigo || 'Sin dataset' }} · {{ caso.periodo || 'Sin período' }}</small>
+        <div *ngIf="casos.length > 0" class="casos-table">
+          <div class="casos-head">
+            <span>Caso</span>
+            <span>Dataset</span>
+            <span>Excel</span>
+            <span>Última corrida</span>
+            <span>Resultado</span>
+            <span>Acciones</span>
+          </div>
+
+          <div *ngFor="let caso of casos; trackBy: trackByCaso" class="caso-row">
+            <button type="button" class="caso-main" (click)="cargarCaso(caso)">
+              <mat-icon>assignment</mat-icon>
+              <span>
+                <strong>{{ caso.id }}</strong>
+                <small>{{ caso.periodo || 'Sin período' }} · Legajo {{ legajoCaso(caso) }}</small>
+              </span>
+            </button>
+
+            <span class="cell-text">{{ caso.dataset_codigo || 'Sin dataset' }}</span>
+            <span class="cell-text">{{ nombreExcel(caso) }}</span>
+            <span class="cell-text">{{ fechaEjecucion(ultimaEjecucion(caso.id)) }}</span>
+            <span class="resultado-pill" [ngClass]="estadoClase(ultimaEjecucion(caso.id))">
+              {{ estadoTexto(ultimaEjecucion(caso.id)) }}
             </span>
-          </button>
 
-          <span class="caso-estado">{{ caso.resultado_esperado.estado }}</span>
+            <div class="acciones-tabla">
+              <button
+                mat-stroked-button
+                type="button"
+                class="run-btn"
+                matTooltip="Ejecutar rápido"
+                [disabled]="casoBloqueado(caso.id)"
+                (click)="ejecutarCaso(caso, 'rapido')">
+                <mat-icon>{{ casoBloqueado(caso.id) ? 'hourglass_top' : 'play_arrow' }}</mat-icon>
+                Start
+              </button>
 
-          <button mat-icon-button type="button" title="Eliminar caso" (click)="eliminarCaso(caso.id)">
-            <mat-icon>delete</mat-icon>
-          </button>
+              <button
+                mat-stroked-button
+                type="button"
+                class="run-btn demo"
+                matTooltip="Ver demo lento"
+                [disabled]="casoBloqueado(caso.id)"
+                (click)="ejecutarCaso(caso, 'demo')">
+                <mat-icon>slideshow</mat-icon>
+                Demo
+              </button>
+
+              <button
+                mat-icon-button
+                type="button"
+                matTooltip="Ver resultado"
+                [disabled]="!ultimaEjecucion(caso.id)"
+                (click)="verEjecucion(caso.id)">
+                <mat-icon>receipt_long</mat-icon>
+              </button>
+
+              <button mat-icon-button type="button" matTooltip="Eliminar caso" (click)="eliminarCaso(caso.id)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="ejecucionSeleccionada" class="ejecucion-detalle" [ngClass]="estadoClase(ejecucionSeleccionada)">
+          <div>
+            <span class="detalle-label">Ejecución</span>
+            <strong>{{ ejecucionSeleccionada.id }}</strong>
+          </div>
+          <div>
+            <span class="detalle-label">Caso</span>
+            <strong>{{ ejecucionSeleccionada.caso_id }}</strong>
+          </div>
+          <div>
+            <span class="detalle-label">Modo</span>
+            <strong>{{ modoTexto(ejecucionSeleccionada.modo) }}</strong>
+          </div>
+          <div>
+            <span class="detalle-label">Detalle</span>
+            <strong>{{ ejecucionSeleccionada.detalle || estadoTexto(ejecucionSeleccionada) }}</strong>
+          </div>
+          <div *ngIf="ejecucionSeleccionada.evidencia_path" class="detalle-wide">
+            <span class="detalle-label">Evidencia</span>
+            <code>{{ ejecucionSeleccionada.evidencia_path }}</code>
+          </div>
         </div>
       </mat-card>
     </main>
@@ -348,19 +445,42 @@ interface CasoGuardadoLegacy {
     .acciones button { height: 38px; border-radius: 8px; font-weight: 900; }
     .acciones mat-icon { margin-right: 6px; }
     .preview-panel pre { max-height: 560px; min-height: 432px; overflow: auto; margin: 0; padding: 14px; border-radius: 10px; background: #111827; color: #e5edff; font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
-    .casos-panel { display: grid; gap: 8px; }
+    .casos-panel { display: grid; gap: 10px; overflow: hidden; }
     .empty-state { display: flex; align-items: center; gap: 8px; padding: 14px; border: 1px dashed #cbd7ea; border-radius: 10px; color: #64748b; font-size: 13px; font-weight: 800; }
-    .caso-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 8px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; }
+    .refresh-btn { height: 36px; border-radius: 8px; font-size: 12px; font-weight: 900; }
+    .refresh-btn mat-icon { margin-right: 6px; }
+    .casos-table { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; }
+    .casos-head, .caso-row { display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 0.9fr) minmax(210px, 1fr) minmax(145px, 0.7fr) 112px 250px; align-items: center; min-width: 1120px; }
+    .casos-head { min-height: 38px; padding: 0 12px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; color: #475569; font-size: 11px; font-weight: 950; text-transform: uppercase; }
+    .caso-row { min-height: 64px; padding: 8px 12px; gap: 0; border-bottom: 1px solid #eef2f7; background: #ffffff; }
+    .caso-row:last-child { border-bottom: 0; }
     .caso-main { min-width: 0; display: flex; align-items: center; gap: 10px; border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
     .caso-main mat-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #eff6ff; color: #2563eb; font-size: 20px; flex: 0 0 auto; }
     .caso-main span { min-width: 0; display: grid; gap: 2px; }
-    .caso-main strong, .caso-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .caso-main strong, .caso-main small, .cell-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .caso-main strong { color: #0f172a; font-size: 13px; font-weight: 950; }
     .caso-main small { color: #64748b; font-size: 11px; font-weight: 800; }
-    .caso-estado { padding: 5px 9px; border-radius: 999px; background: #ecfdf5; color: #15803d; font-size: 11px; font-weight: 900; }
+    .cell-text { min-width: 0; padding-right: 12px; color: #334155; font-size: 12px; font-weight: 850; }
+    .resultado-pill { justify-self: start; min-width: 86px; height: 28px; display: inline-grid; place-items: center; padding: 0 10px; border-radius: 999px; font-size: 11px; font-weight: 950; text-transform: uppercase; }
+    .resultado-pill.sin-correr { background: #f1f5f9; color: #64748b; }
+    .resultado-pill.corriendo { background: #eff6ff; color: #1d4ed8; }
+    .resultado-pill.verde { background: #dcfce7; color: #166534; }
+    .resultado-pill.rojo { background: #fee2e2; color: #991b1b; }
+    .acciones-tabla { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+    .run-btn { height: 34px; min-width: 74px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 950; }
+    .run-btn mat-icon { margin-right: 4px; font-size: 18px; width: 18px; height: 18px; }
+    .run-btn.demo { color: #4338ca; border-color: #c7d2fe; }
+    .ejecucion-detalle { display: grid; grid-template-columns: minmax(150px, 0.65fr) minmax(150px, 0.65fr) minmax(120px, 0.4fr) minmax(260px, 1.3fr); gap: 10px; padding: 12px; border-radius: 10px; border: 1px solid #e2e8f0; background: #f8fafc; }
+    .ejecucion-detalle.verde { border-color: #bbf7d0; background: #f0fdf4; }
+    .ejecucion-detalle.rojo { border-color: #fecaca; background: #fff7f7; }
+    .ejecucion-detalle.corriendo { border-color: #bfdbfe; background: #eff6ff; }
+    .detalle-label { display: block; margin-bottom: 4px; color: #64748b; font-size: 10px; font-weight: 950; text-transform: uppercase; }
+    .ejecucion-detalle strong, .ejecucion-detalle code { color: #0f172a; font-size: 12px; font-weight: 900; overflow-wrap: anywhere; }
+    .detalle-wide { grid-column: 1 / -1; }
     @media (max-width: 1120px) {
       .qa-grid { grid-template-columns: 1fr; }
       .preview-panel pre { min-height: 260px; }
+      .ejecucion-detalle { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 720px) {
       .qa-page { padding: 16px 12px 24px; }
@@ -369,12 +489,13 @@ interface CasoGuardadoLegacy {
       .form-grid { grid-template-columns: 1fr; }
       .field-wide { grid-column: auto; }
       .excel-box, .acciones { align-items: stretch; flex-direction: column; }
-      .caso-row { grid-template-columns: minmax(0, 1fr) auto; }
-      .caso-estado { display: none; }
+      .panel-header { flex-direction: column; }
+      .refresh-btn { width: 100%; }
+      .ejecucion-detalle { grid-template-columns: 1fr; }
     }
   `]
 })
-export class QaPantalla1Component implements OnInit {
+export class QaPantalla1Component implements OnInit, OnDestroy {
   readonly estados: { valor: EstadoEsperado; texto: string }[] = [
     { valor: 'validado', texto: 'Validado' },
     { valor: 'observado', texto: 'Observado' },
@@ -392,19 +513,32 @@ export class QaPantalla1Component implements OnInit {
   archivoExcel: ArchivoExcelRef | null = null;
   datasets: DatasetQaRef[] = [];
   casos: CasoQaPayload[] = [];
+  ejecucionesPorCaso = new Map<string, QaEjecucionPayload>();
+  ejecucionSeleccionada: QaEjecucionPayload | null = null;
   mensaje = '';
   mensajeError = false;
   cargandoDatasets = false;
   cargandoCasos = false;
+  cargandoEjecuciones = false;
   guardando = false;
 
   private readonly storageKeyLegacy = 'auditoria-ganancias.qa.casos';
+  private readonly casosEjecutando = new Set<string>();
+  private polling?: Subscription;
 
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.cargarDatasets();
     this.cargarCasos(true);
+    this.cargarEjecuciones();
+    this.polling = timer(5000, 5000).subscribe(() => {
+      if (this.hayEjecucionesCorriendo()) this.cargarEjecuciones(false);
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.polling?.unsubscribe();
   }
 
   get datasetSeleccionado(): DatasetQaRef | null {
@@ -460,6 +594,7 @@ export class QaPantalla1Component implements OnInit {
       next: (caso) => {
         this.guardando = false;
         this.upsertCaso(caso);
+        this.cargarEjecuciones(false);
         this.mostrarMensaje('Caso guardado en MongoDB para Playwright.');
       },
       error: (error) => {
@@ -543,10 +678,92 @@ export class QaPantalla1Component implements OnInit {
     this.api.delete<{ id: string; activo: false }>(`/qa/casos/${encodeURIComponent(id)}`).subscribe({
       next: () => {
         this.casos = this.casos.filter((caso) => caso.id !== id);
+        const ejecuciones = new Map(this.ejecucionesPorCaso);
+        ejecuciones.delete(id);
+        this.ejecucionesPorCaso = ejecuciones;
+        if (this.ejecucionSeleccionada?.caso_id === id) this.ejecucionSeleccionada = null;
         this.mostrarMensaje('Caso desactivado.');
       },
       error: () => this.mostrarMensaje('No se pudo eliminar el caso.', true),
     });
+  }
+
+  ejecutarCaso(caso: CasoQaPayload, modo: ModoQaEjecucion): void {
+    if (this.casoBloqueado(caso.id)) return;
+
+    this.casosEjecutando.add(caso.id);
+    this.mostrarMensaje(modo === 'demo'
+      ? `Demo lento iniciado para ${caso.id}.`
+      : `Ejecución iniciada para ${caso.id}.`);
+
+    this.api.post<QaEjecucionPayload>(`/qa/casos/${encodeURIComponent(caso.id)}/ejecutar`, { modo }).subscribe({
+      next: (ejecucion) => {
+        this.casosEjecutando.delete(caso.id);
+        this.upsertEjecucion(ejecucion);
+        this.ejecucionSeleccionada = ejecucion;
+      },
+      error: (error) => {
+        this.casosEjecutando.delete(caso.id);
+        this.mostrarMensaje(this.mensajeErrorApi(error, `No se pudo ejecutar ${caso.id}. Revisá backend, frontend y Excel.`), true);
+      },
+    });
+  }
+
+  refrescarOperacion(): void {
+    this.cargarDatasets();
+    this.cargarCasos(false);
+    this.cargarEjecuciones();
+  }
+
+  verEjecucion(casoId: string): void {
+    const ejecucion = this.ultimaEjecucion(casoId);
+    if (!ejecucion) return;
+    this.ejecucionSeleccionada = ejecucion;
+  }
+
+  ultimaEjecucion(casoId: string): QaEjecucionPayload | null {
+    return this.ejecucionesPorCaso.get(casoId) ?? null;
+  }
+
+  casoBloqueado(casoId: string): boolean {
+    return this.casosEjecutando.has(casoId) || this.ultimaEjecucion(casoId)?.estado === 'corriendo';
+  }
+
+  estadoClase(ejecucion: QaEjecucionPayload | null): string {
+    return ejecucion?.estado ?? 'sin-correr';
+  }
+
+  estadoTexto(ejecucion: QaEjecucionPayload | null): string {
+    if (!ejecucion) return 'Sin correr';
+    if (ejecucion.estado === 'verde') return 'Verde';
+    if (ejecucion.estado === 'rojo') return 'Rojo';
+    return 'Corriendo';
+  }
+
+  modoTexto(modo: ModoQaEjecucion): string {
+    return modo === 'demo' ? 'Demo lento' : 'Rápido';
+  }
+
+  fechaEjecucion(ejecucion: QaEjecucionPayload | null): string {
+    const fecha = ejecucion?.finalizado_en || ejecucion?.iniciado_en;
+    if (!fecha) return '-';
+    const date = new Date(fecha);
+    if (Number.isNaN(date.getTime())) return fecha;
+    return new Intl.DateTimeFormat('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  nombreExcel(caso: CasoQaPayload): string {
+    return caso.archivo?.nombre || 'Sin Excel';
+  }
+
+  legajoCaso(caso: CasoQaPayload): string {
+    return caso.contexto?.empleado?.legajo || '-';
   }
 
   trackByCaso(_index: number, caso: CasoQaPayload): string {
@@ -583,6 +800,22 @@ export class QaPantalla1Component implements OnInit {
       error: () => {
         this.cargandoCasos = false;
         this.mostrarMensaje('No se pudieron cargar los casos QA desde el backend.', true);
+      },
+    });
+  }
+
+  private cargarEjecuciones(mostrarCarga = true): void {
+    if (mostrarCarga) this.cargandoEjecuciones = true;
+    this.api.get<QaEjecucionPayload[]>('/qa/ejecuciones/ultimas').subscribe({
+      next: (ejecuciones) => {
+        this.cargandoEjecuciones = false;
+        this.ejecucionesPorCaso = new Map(ejecuciones.map((ejecucion) => [ejecucion.caso_id, ejecucion]));
+        if (this.ejecucionSeleccionada) {
+          this.ejecucionSeleccionada = this.ejecucionesPorCaso.get(this.ejecucionSeleccionada.caso_id) ?? this.ejecucionSeleccionada;
+        }
+      },
+      error: () => {
+        this.cargandoEjecuciones = false;
       },
     });
   }
@@ -787,6 +1020,17 @@ export class QaPantalla1Component implements OnInit {
 
   private upsertCaso(caso: CasoQaPayload): void {
     this.casos = [caso, ...this.casos.filter((actual) => actual.id !== caso.id)];
+  }
+
+  private upsertEjecucion(ejecucion: QaEjecucionPayload): void {
+    const ejecuciones = new Map(this.ejecucionesPorCaso);
+    ejecuciones.set(ejecucion.caso_id, ejecucion);
+    this.ejecucionesPorCaso = ejecuciones;
+  }
+
+  private hayEjecucionesCorriendo(): boolean {
+    return this.casosEjecutando.size > 0 ||
+      Array.from(this.ejecucionesPorCaso.values()).some((ejecucion) => ejecucion.estado === 'corriendo');
   }
 
   private mostrarMensaje(mensaje: string, error = false): void {
