@@ -54,8 +54,18 @@ En `QA > Pantalla 1`, la tabla `Operacion QA` permite ejecutar un caso puntual s
 - `Start`: ejecuta el caso en modo rapido.
 - `Demo`: ejecuta el caso con navegador visible y pasos lentos.
 - `Ver resultado`: muestra el estado, detalle y ruta de evidencia de la ultima corrida.
+- `Probar error dataset`: envia una prueba negativa sin guardar un caso real. Usa el dataset seleccionado, fuerza un periodo distinto y espera que el backend rechace el alta.
 
 El backend llama internamente al mismo runner, seteando `AUDITORIA_QA_CASE` con el ID de la fila elegida. Por eso Playwright no elige un caso al azar: ejecuta el caso del boton presionado.
+
+La prueba negativa sirve para demostrar este control:
+
+```text
+Dataset: DS-AUD-GAN-082026
+Periodo dataset: 08/2026
+Caso QA periodo: 06/2026
+Resultado esperado: error, no se guarda el caso
+```
 
 Para hacerlo aun mas lento:
 

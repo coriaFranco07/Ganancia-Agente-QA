@@ -309,6 +309,15 @@ interface QaEjecucionPayload {
             <mat-icon>refresh</mat-icon>
             Actualizar
           </button>
+          <button
+            mat-stroked-button
+            type="button"
+            class="negative-test-btn"
+            [disabled]="probandoValidacion || datasets.length === 0"
+            (click)="probarBloqueoPeriodoDataset()">
+            <mat-icon>{{ probandoValidacion ? 'hourglass_top' : 'report_problem' }}</mat-icon>
+            Probar error dataset
+          </button>
         </div>
 
         <div *ngIf="!cargandoCasos && casos.length === 0" class="empty-state">
@@ -447,8 +456,9 @@ interface QaEjecucionPayload {
     .preview-panel pre { max-height: 560px; min-height: 432px; overflow: auto; margin: 0; padding: 14px; border-radius: 10px; background: #111827; color: #e5edff; font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
     .casos-panel { display: grid; gap: 10px; overflow: hidden; }
     .empty-state { display: flex; align-items: center; gap: 8px; padding: 14px; border: 1px dashed #cbd7ea; border-radius: 10px; color: #64748b; font-size: 13px; font-weight: 800; }
-    .refresh-btn { height: 36px; border-radius: 8px; font-size: 12px; font-weight: 900; }
-    .refresh-btn mat-icon { margin-right: 6px; }
+    .refresh-btn, .negative-test-btn { height: 36px; border-radius: 8px; font-size: 12px; font-weight: 900; }
+    .refresh-btn mat-icon, .negative-test-btn mat-icon { margin-right: 6px; }
+    .negative-test-btn { color: #b45309; border-color: #fcd34d; }
     .casos-table { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; }
     .casos-head, .caso-row { display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 0.9fr) minmax(210px, 1fr) minmax(145px, 0.7fr) 112px 250px; align-items: center; min-width: 1120px; }
     .casos-head { min-height: 38px; padding: 0 12px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; color: #475569; font-size: 11px; font-weight: 950; text-transform: uppercase; }
@@ -490,7 +500,7 @@ interface QaEjecucionPayload {
       .field-wide { grid-column: auto; }
       .excel-box, .acciones { align-items: stretch; flex-direction: column; }
       .panel-header { flex-direction: column; }
-      .refresh-btn { width: 100%; }
+      .refresh-btn, .negative-test-btn { width: 100%; }
       .ejecucion-detalle { grid-template-columns: 1fr; }
     }
   `]
@@ -521,6 +531,7 @@ export class QaPantalla1Component implements OnInit, OnDestroy {
   cargandoCasos = false;
   cargandoEjecuciones = false;
   guardando = false;
+  probandoValidacion = false;
 
   private readonly storageKeyLegacy = 'auditoria-ganancias.qa.casos';
   private readonly casosEjecutando = new Set<string>();
@@ -713,6 +724,35 @@ export class QaPantalla1Component implements OnInit, OnDestroy {
     this.cargarDatasets();
     this.cargarCasos(false);
     this.cargarEjecuciones();
+  }
+
+  probarBloqueoPeriodoDataset(): void {
+    const dataset = this.datasetSeleccionado ?? this.datasets.find((item) => item.codigo === 'DS-AUD-GAN-082026') ?? this.datasets[0];
+    if (!dataset) {
+      this.mostrarMensaje('No hay datasets disponibles para probar la validación.', true);
+      return;
+    }
+
+    const periodoInvalido = this.periodoDistinto(dataset.periodo);
+    const payload = this.construirPayloadPruebaNegativa(dataset, periodoInvalido);
+    this.probandoValidacion = true;
+
+    this.api.post<CasoQaPayload>('/qa/casos', payload).subscribe({
+      next: (caso) => {
+        this.probandoValidacion = false;
+        this.api.delete<{ id: string; activo: false }>(`/qa/casos/${encodeURIComponent(caso.id)}`).subscribe();
+        this.mostrarMensaje(
+          `ALERTA: el backend permitió guardar ${caso.id} aunque el dataset era ${dataset.periodo} y el caso ${periodoInvalido}. Lo desactivé para no ensuciar la tabla.`,
+          true,
+        );
+      },
+      error: (error) => {
+        this.probandoValidacion = false;
+        this.mostrarMensaje(
+          `Validación OK: el backend rechazó ${dataset.codigo} con período de caso ${periodoInvalido}. ${this.mensajeErrorApi(error, '')}`,
+        );
+      },
+    });
   }
 
   verEjecucion(casoId: string): void {
@@ -914,6 +954,54 @@ export class QaPantalla1Component implements OnInit, OnDestroy {
     };
   }
 
+  private construirPayloadPruebaNegativa(dataset: DatasetQaRef, periodoInvalido: string): CasoQaPayload {
+    return {
+      id: `QA-NEG-DATASET-${Date.now()}`,
+      dataset_codigo: dataset.codigo,
+      periodo: periodoInvalido,
+      descripcion: `Prueba negativa: dataset ${dataset.codigo} (${dataset.periodo}) no debe aceptar caso ${periodoInvalido}.`,
+      archivo: null,
+      contexto: {
+        empleado: {
+          legajo: 'NEG-DATASET',
+          nombre: 'Prueba negativa dataset',
+          cuil: '',
+        },
+        liquidacion: {
+          remuneracion_bruta: null,
+          deducciones: null,
+        },
+        contexto_complementario: {
+          datos_cliente: {},
+          datos_legajo: { legajo_numero: 'NEG-DATASET' },
+          datos_contexto: {
+            fuente_datos: 'qa_negative_dataset_period',
+            periodo_fiscal: this.parsearPeriodo(periodoInvalido).anio,
+            mes_liquidacion: this.parsearPeriodo(periodoInvalido).mes,
+          },
+        },
+      },
+      resultado_esperado: {
+        campo: 'calculo.retencion_excel',
+        valor: 0,
+        tolerancia: 0.05,
+        estado: 'validado',
+      },
+      assertions: [
+        {
+          campo: 'calculo.retencion_excel',
+          operador: 'igual',
+          esperado: 0,
+          tolerancia: 0.05,
+        },
+      ],
+      origen: {
+        tipo: 'prueba_negativa_dataset_periodo',
+        generado_en: new Date().toISOString(),
+      },
+    };
+  }
+
   private contextoComplementario(): Record<string, unknown> {
     const periodo = this.parsearPeriodo(this.form.periodo);
     const datosCliente: Record<string, unknown> = {};
@@ -1006,6 +1094,21 @@ export class QaPantalla1Component implements OnInit, OnDestroy {
     if (!match) return { mes: null, anio: null };
     const anio = match[2].length === 2 ? Number(`20${match[2]}`) : Number(match[2]);
     return { mes: Number(match[1]), anio };
+  }
+
+  private periodoDistinto(periodo: string): string {
+    const parsed = this.parsearPeriodo(periodo);
+    if (!parsed.mes || !parsed.anio) return '06/2026';
+
+    let mes = parsed.mes === 1 ? 12 : parsed.mes - 1;
+    let anio = parsed.mes === 1 ? parsed.anio - 1 : parsed.anio;
+
+    if (mes === parsed.mes && anio === parsed.anio) {
+      mes = parsed.mes === 12 ? 11 : parsed.mes + 1;
+      anio = parsed.anio;
+    }
+
+    return `${String(mes).padStart(2, '0')}/${anio}`;
   }
 
   private importe(valor: number | null): number | null {
