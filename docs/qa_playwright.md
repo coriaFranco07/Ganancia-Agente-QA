@@ -11,8 +11,24 @@ Este flujo ejecuta casos creados desde el frontend en `QA > Pantalla 1`.
 5. El runner Playwright vuelve a validar el dataset antes de ejecutar.
 6. El runner busca ese Excel en una carpeta local configurable.
 7. En modo demo, Playwright vuelve a cargar el caso desde la UI `QA > Pantalla 1` para mostrar el alta del formulario.
-8. Playwright carga el Excel desde la UI, espera el analisis y valida las assertions contra el JSON real del snapshot.
-9. Las ejecuciones iniciadas desde la pantalla se guardan en MongoDB, coleccion `qa_ejecuciones`.
+8. Playwright carga el Excel desde la UI, espera el analisis y valida que el archivo corresponda al caso QA.
+9. Playwright valida las assertions contra el JSON real del snapshot.
+10. Las ejecuciones iniciadas desde la pantalla se guardan en MongoDB, coleccion `qa_ejecuciones`.
+
+## Controles automaticos QA
+
+Antes de validar el calculo, el runner controla el archivo:
+
+- `archivo.periodo`: el periodo detectado del Excel debe coincidir con el periodo del caso.
+- `archivo.legajo`: el legajo detectado del Excel debe coincidir con el legajo del caso.
+
+El analisis conserva `control_archivo.metadata_detectada` antes de aplicar los datos manuales del formulario. Por eso, si el formulario carga `06/2026` pero el nombre del Excel indica `Meses_1al_8`, QA puede detectar `08/2026` como periodo del archivo y marcar rojo.
+
+Para desactivar ese control solo en una corrida tecnica:
+
+```powershell
+$env:AUDITORIA_QA_VALIDAR_ARCHIVO="false"
+```
 
 ## Requisitos
 

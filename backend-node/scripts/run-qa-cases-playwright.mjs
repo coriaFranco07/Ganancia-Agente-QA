@@ -29,6 +29,7 @@ const slowMoMs = Number(process.env.PLAYWRIGHT_SLOWMO_MS ?? (modoMuyLento ? 2600
 const demoPauseMs = Number(process.env.PLAYWRIGHT_DEMO_PAUSE_MS ?? (modoMuyLento ? 1800 : modoDemo ? 900 : 0));
 const demoFinalPauseMs = Number(process.env.PLAYWRIGHT_DEMO_FINAL_PAUSE_MS ?? (modoMuyLento ? 25000 : modoDemo ? 15000 : 0));
 const cargarFormularioQa = modoDemo || process.env.AUDITORIA_QA_CARGAR_FORM === 'true';
+const validarArchivoQa = process.env.AUDITORIA_QA_VALIDAR_ARCHIVO !== 'false';
 
 const capturas = [];
 const capturasFallidas = [];
@@ -120,7 +121,8 @@ async function ejecutarCaso(caso) {
     await cargarExcelPorUi(caso, excelPath, casoSeguro);
     const snapshotId = extraerSnapshotId(page.url());
     const analisis = await leerAnalisis(snapshotId);
-    const verificaciones = validarAssertions(caso, analisis);
+    const verificacionesArchivo = validarArchivoCaso(caso, analisis);
+    const verificaciones = [...verificacionesArchivo, ...validarAssertions(caso, analisis)];
     await mostrarResultadoDemo({
       estado: 'verde',
       caso,
@@ -136,6 +138,8 @@ async function ejecutarCaso(caso) {
       dataset,
       snapshot_id: snapshotId,
       archivo: basename(excelPath),
+      control_archivo: analisis.control_archivo ?? null,
+      controles_archivo: verificacionesArchivo,
       assertions: verificaciones,
       detalle: `${verificaciones.length} assertion(s) OK`,
     };
@@ -373,6 +377,86 @@ function validarAssertions(caso, analisis) {
     assert.deepEqual(actual, esperado, `${assertion.campo}: esperado ${JSON.stringify(esperado)}, actual ${JSON.stringify(actual)}`);
     return { campo: assertion.campo, esperado, actual, tolerancia: null };
   });
+}
+
+function validarArchivoCaso(caso, analisis) {
+  if (!validarArchivoQa) return [];
+
+  const control = objeto(analisis.control_archivo);
+  if (!Object.keys(control).length) {
+    throw new Error('El análisis no informó control_archivo; no puedo confirmar que el Excel corresponda al caso QA.');
+  }
+
+  const verificaciones = [];
+  const periodoCaso = parsearPeriodo(caso.periodo);
+  const periodoExcel = periodoDesdeControl(control);
+  if (periodoCaso.mes && periodoCaso.anio) {
+    if (!periodoExcel.mes) {
+      throw new Error(`No pude confirmar el período del Excel para ${caso.id}. El caso espera ${periodoTexto(periodoCaso)}.`);
+    }
+
+    if (periodoExcel.mes !== periodoCaso.mes || (periodoExcel.anio && periodoExcel.anio !== periodoCaso.anio)) {
+      throw new Error(`El Excel no corresponde al período del caso QA: esperado ${periodoTexto(periodoCaso)}, detectado ${periodoTexto(periodoExcel)} (${texto(periodoExcel.fuente) || 'fuente no informada'}).`);
+    }
+
+    verificaciones.push({
+      campo: 'archivo.periodo',
+      esperado: periodoTexto(periodoCaso),
+      actual: periodoTexto(periodoExcel),
+      tolerancia: null,
+    });
+  }
+
+  const legajoEsperado = legajoCaso(caso);
+  if (legajoEsperado) {
+    const legajoDetectado = texto(control.legajo_detectado) ||
+      texto(control.metadata_detectada?.legajo) ||
+      texto(control.contexto_excel_detectado?.datos_legajo?.legajo_numero);
+
+    if (!legajoDetectado) {
+      throw new Error(`No pude confirmar el legajo del Excel para ${caso.id}. El caso espera legajo ${legajoEsperado}.`);
+    }
+
+    if (normalizarLegajo(legajoDetectado) !== normalizarLegajo(legajoEsperado)) {
+      throw new Error(`El Excel no corresponde al legajo del caso QA: esperado ${legajoEsperado}, detectado ${legajoDetectado}.`);
+    }
+
+    verificaciones.push({
+      campo: 'archivo.legajo',
+      esperado: legajoEsperado,
+      actual: legajoDetectado,
+      tolerancia: null,
+    });
+  }
+
+  return verificaciones;
+}
+
+function periodoDesdeControl(control) {
+  const periodo = objeto(control.periodo_detectado);
+  return {
+    mes: numero(periodo.mes),
+    anio: numero(periodo.anio),
+    etiqueta: texto(periodo.etiqueta),
+    fuente: texto(periodo.fuente),
+  };
+}
+
+function periodoTexto(periodo) {
+  if (periodo.etiqueta) return periodo.etiqueta;
+  if (!periodo.mes) return '-';
+  return periodo.anio ? `${String(periodo.mes).padStart(2, '0')}/${periodo.anio}` : String(periodo.mes).padStart(2, '0');
+}
+
+function legajoCaso(caso) {
+  return texto(caso.contexto?.empleado?.legajo) ||
+    texto(caso.contexto?.contexto_complementario?.datos_legajo?.legajo_numero);
+}
+
+function normalizarLegajo(valor) {
+  const textoValor = texto(valor);
+  const soloDigitos = textoValor.replace(/\D+/g, '');
+  return soloDigitos || textoValor.toLowerCase();
 }
 
 function assertionDesdeResultado(caso) {
