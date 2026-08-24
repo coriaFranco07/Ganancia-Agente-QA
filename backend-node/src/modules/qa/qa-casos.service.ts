@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { QaDatasetsService } from './qa-datasets.service';
 import { QaCaso, QaCasoDocument } from './schemas/qa-caso.schema';
 
 type OperadorAssertion = 'igual';
@@ -15,6 +16,7 @@ interface AssertionQa {
 interface CasoNormalizado {
   id: string;
   dataset_codigo: string;
+  dataset: Record<string, unknown> | null;
   periodo: string;
   descripcion: string;
   archivo: Record<string, unknown> | null;
@@ -33,7 +35,10 @@ type QaCasoLean = QaCaso & {
 
 @Injectable()
 export class QaCasosService {
-  constructor(@InjectModel(QaCaso.name) private readonly casos: Model<QaCasoDocument>) {}
+  constructor(
+    @InjectModel(QaCaso.name) private readonly casos: Model<QaCasoDocument>,
+    private readonly datasets: QaDatasetsService,
+  ) {}
 
   async listar(activo = true): Promise<Record<string, unknown>[]> {
     const filtro = activo ? { activo: { $ne: false } } : {};
@@ -48,7 +53,7 @@ export class QaCasosService {
   }
 
   async guardar(entrada: unknown): Promise<Record<string, unknown>> {
-    const caso = this.normalizarCaso(entrada);
+    const caso = await this.normalizarCaso(entrada);
     const doc = await this.casos
       .findOneAndUpdate(
         { id: caso.id },
@@ -67,7 +72,7 @@ export class QaCasosService {
     return { id, activo: false };
   }
 
-  private normalizarCaso(entrada: unknown): CasoNormalizado {
+  private async normalizarCaso(entrada: unknown): Promise<CasoNormalizado> {
     if (!entrada || typeof entrada !== 'object' || Array.isArray(entrada)) {
       throw new BadRequestException('El caso QA debe ser un objeto JSON.');
     }
@@ -75,6 +80,8 @@ export class QaCasosService {
     const body = entrada as Record<string, unknown>;
     const id = this.texto(body['id']);
     if (!id) throw new BadRequestException('El caso QA requiere id.');
+    const periodo = this.texto(body['periodo']);
+    const dataset = await this.datasets.resolverParaCaso(this.texto(body['dataset_codigo']), periodo);
 
     const resultadoEntrada = this.objeto(body['resultado_esperado']);
     const campo = this.texto(resultadoEntrada['campo']) || 'calculo.retencion_excel';
@@ -95,8 +102,9 @@ export class QaCasosService {
 
     return {
       id,
-      dataset_codigo: this.texto(body['dataset_codigo']),
-      periodo: this.texto(body['periodo']),
+      dataset_codigo: dataset.codigo,
+      dataset,
+      periodo,
       descripcion: this.texto(body['descripcion']),
       archivo: this.normalizarArchivo(body['archivo']),
       contexto: this.objeto(body['contexto']),

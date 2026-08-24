@@ -40,6 +40,17 @@ interface ArchivoExcelRef {
   seleccionado_en: string;
 }
 
+interface DatasetQaRef {
+  codigo: string;
+  convenio: string;
+  periodo: string;
+  vigencia: Record<string, unknown>;
+  validado_por: string;
+  validado_en: string;
+  fuente_normativa: Record<string, unknown>;
+  estado: string;
+}
+
 interface AssertionQa {
   campo: string;
   operador: 'igual';
@@ -50,6 +61,7 @@ interface AssertionQa {
 interface CasoQaPayload {
   id: string;
   dataset_codigo: string;
+  dataset?: DatasetQaRef | null;
   periodo: string;
   descripcion: string;
   archivo: ArchivoExcelRef | null;
@@ -119,12 +131,25 @@ interface CasoGuardadoLegacy {
 
             <label class="field">
               <span>Código dataset</span>
-              <input [(ngModel)]="form.datasetCodigo" name="datasetCodigo" placeholder="DS-AUD-GAN-082026">
+              <select
+                [(ngModel)]="form.datasetCodigo"
+                name="datasetCodigo"
+                [disabled]="cargandoDatasets || datasets.length === 0"
+                (ngModelChange)="aplicarDatasetSeleccionado($event)"
+              >
+                <option value="">{{ cargandoDatasets ? 'Cargando datasets...' : 'Seleccioná dataset' }}</option>
+                <option *ngFor="let dataset of datasets; trackBy: trackByDataset" [ngValue]="dataset.codigo">
+                  {{ dataset.codigo }} · {{ dataset.periodo }} · {{ dataset.convenio }}
+                </option>
+              </select>
+              <small *ngIf="datasetSeleccionado" class="field-help">
+                {{ datasetFuenteNormativa }}
+              </small>
             </label>
 
             <label class="field">
               <span>Período</span>
-              <input [(ngModel)]="form.periodo" name="periodo" placeholder="06/2026">
+              <input [(ngModel)]="form.periodo" name="periodo" placeholder="06/2026" [readonly]="!!datasetSeleccionado">
             </label>
 
             <label class="field">
@@ -306,7 +331,9 @@ interface CasoGuardadoLegacy {
     .field-wide { grid-column: span 2; }
     .field span { color: #475569; font-size: 11px; font-weight: 900; }
     .field input, .field select { width: 100%; min-width: 0; height: 38px; padding: 0 10px; border: 1px solid #cbd7ea; border-radius: 8px; outline: 0; background: #ffffff; color: #0f172a; font: inherit; font-size: 12px; font-weight: 750; box-sizing: border-box; }
+    .field input[readonly] { background: #f1f5f9; color: #334155; }
     .field input:focus, .field select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+    .field-help { min-height: 14px; overflow: hidden; color: #64748b; font-size: 10px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
     .excel-box { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px; border: 1px dashed #bad2ff; border-radius: 10px; background: #f8fbff; }
     .excel-btn { height: 38px; border-radius: 8px; font-weight: 900; white-space: nowrap; }
     .excel-btn mat-icon { margin-right: 6px; }
@@ -363,9 +390,11 @@ export class QaPantalla1Component implements OnInit {
 
   form: CasoQaForm = this.crearForm();
   archivoExcel: ArchivoExcelRef | null = null;
+  datasets: DatasetQaRef[] = [];
   casos: CasoQaPayload[] = [];
   mensaje = '';
   mensajeError = false;
+  cargandoDatasets = false;
   cargandoCasos = false;
   guardando = false;
 
@@ -374,11 +403,27 @@ export class QaPantalla1Component implements OnInit {
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
+    this.cargarDatasets();
     this.cargarCasos(true);
+  }
+
+  get datasetSeleccionado(): DatasetQaRef | null {
+    return this.datasets.find((dataset) => dataset.codigo === this.form.datasetCodigo) ?? null;
+  }
+
+  get datasetFuenteNormativa(): string {
+    return this.texto(this.datasetSeleccionado?.fuente_normativa?.['ref']) || 'Sin fuente normativa';
   }
 
   get previewJson(): string {
     return JSON.stringify(this.construirPayload(), null, 2);
+  }
+
+  aplicarDatasetSeleccionado(codigo: string): void {
+    const dataset = this.datasets.find((item) => item.codigo === codigo);
+    if (!dataset) return;
+    this.form.periodo = dataset.periodo;
+    this.mostrarMensaje(`Dataset conectado: ${dataset.codigo}. Período tomado del dataset.`);
   }
 
   seleccionarExcel(event: Event): void {
@@ -417,9 +462,9 @@ export class QaPantalla1Component implements OnInit {
         this.upsertCaso(caso);
         this.mostrarMensaje('Caso guardado en MongoDB para Playwright.');
       },
-      error: () => {
+      error: (error) => {
         this.guardando = false;
-        this.mostrarMensaje('No se pudo guardar el caso. Revisá que el backend esté levantado.', true);
+        this.mostrarMensaje(this.mensajeErrorApi(error, 'No se pudo guardar el caso. Revisá dataset, período y backend.'), true);
       },
     });
   }
@@ -432,10 +477,12 @@ export class QaPantalla1Component implements OnInit {
   }
 
   cargarEjemplo(): void {
+    const periodo = '06/2026';
+    const dataset = this.datasetParaPeriodo(periodo);
     this.form = {
       idCaso: 'QA-GAN-RET-001',
-      datasetCodigo: 'DS-AUD-GAN-082026',
-      periodo: '06/2026',
+      datasetCodigo: dataset?.codigo ?? '',
+      periodo: dataset?.periodo ?? periodo,
       descripcion: 'Validar que el legajo 6 no tenga retención liquidada en junio porque el cálculo da saldo negativo.',
       clienteNombre: 'NETSER S.A.',
       modoSaldoFavor: 'compensar',
@@ -455,7 +502,9 @@ export class QaPantalla1Component implements OnInit {
       },
       estadoEsperado: 'validado',
     };
-    this.mostrarMensaje('Ejemplo cargado. Agregá el Excel y guardá el caso.');
+    this.mostrarMensaje(dataset
+      ? `Ejemplo cargado con dataset ${dataset.codigo}. Agregá el Excel y guardá el caso.`
+      : 'Ejemplo cargado. Primero seleccioná un dataset compatible y después agregá el Excel.');
   }
 
   cargarCaso(caso: CasoQaPayload): void {
@@ -502,6 +551,25 @@ export class QaPantalla1Component implements OnInit {
 
   trackByCaso(_index: number, caso: CasoQaPayload): string {
     return caso.id;
+  }
+
+  trackByDataset(_index: number, dataset: DatasetQaRef): string {
+    return dataset.codigo;
+  }
+
+  private cargarDatasets(): void {
+    this.cargandoDatasets = true;
+    this.api.get<DatasetQaRef[]>('/qa/datasets').subscribe({
+      next: (datasets) => {
+        this.datasets = datasets;
+        this.cargandoDatasets = false;
+      },
+      error: (error) => {
+        this.datasets = [];
+        this.cargandoDatasets = false;
+        this.mostrarMensaje(this.mensajeErrorApi(error, 'No se pudieron cargar los datasets del catálogo QA.'), true);
+      },
+    });
   }
 
   private cargarCasos(migrarLegacy: boolean): void {
@@ -724,6 +792,21 @@ export class QaPantalla1Component implements OnInit {
   private mostrarMensaje(mensaje: string, error = false): void {
     this.mensaje = mensaje;
     this.mensajeError = error;
+  }
+
+  private datasetParaPeriodo(periodo: string): DatasetQaRef | null {
+    return this.datasets.find((dataset) => dataset.periodo === periodo) ?? null;
+  }
+
+  private mensajeErrorApi(error: unknown, fallback: string): string {
+    const respuesta = this.objeto((error as { error?: unknown })?.error);
+    const mensaje = this.texto(respuesta['message']);
+    const errores = Array.isArray(respuesta['errores'])
+      ? respuesta['errores'].map((item) => this.texto(item)).filter(Boolean)
+      : [];
+    if (mensaje && errores.length) return `${mensaje} ${errores.join(' ')}`;
+    if (mensaje) return mensaje;
+    return fallback;
   }
 
   private campoValido(valor: unknown): CampoResultado {

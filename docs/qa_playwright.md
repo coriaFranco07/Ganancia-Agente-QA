@@ -4,17 +4,21 @@ Este flujo ejecuta casos creados desde el frontend en `QA > Pantalla 1`.
 
 ## Idea
 
-1. El caso QA se guarda en MongoDB, coleccion `qa_casos`.
-2. El caso guarda solo la referencia del Excel, por nombre de archivo.
-3. El runner Playwright busca ese Excel en una carpeta local configurable.
-4. En modo demo, Playwright vuelve a cargar el caso desde la UI `QA > Pantalla 1` para mostrar el alta del formulario.
-5. Playwright carga el Excel desde la UI, espera el analisis y valida las assertions contra el JSON real del snapshot.
+1. Los datasets se leen desde el catalogo QA en MongoDB, coleccion `datasets`.
+2. El caso QA se guarda en MongoDB, coleccion `qa_casos`, asociado a un dataset existente.
+3. El backend rechaza el caso si el dataset no existe, no esta completo/validado o el periodo no coincide.
+4. El caso guarda solo la referencia del Excel, por nombre de archivo.
+5. El runner Playwright vuelve a validar el dataset antes de ejecutar.
+6. El runner busca ese Excel en una carpeta local configurable.
+7. En modo demo, Playwright vuelve a cargar el caso desde la UI `QA > Pantalla 1` para mostrar el alta del formulario.
+8. Playwright carga el Excel desde la UI, espera el analisis y valida las assertions contra el JSON real del snapshot.
 
 ## Requisitos
 
 - MongoDB levantado.
 - Backend en `http://localhost:8001/api`.
 - Frontend en `http://localhost:4200`.
+- Datasets existentes en `QA_DATASETS_MONGODB_URI` o, por defecto, `mongodb://127.0.0.1:27017/qa_agentico_esueldos`.
 - El Excel debe existir en la carpeta configurada por `AUDITORIA_QA_EXCEL_DIR`.
 
 ## Comando

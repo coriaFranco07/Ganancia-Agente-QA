@@ -30,7 +30,12 @@ import { AuthService } from './modules/auth/auth.service';
 import { Usuario, UsuarioSchema } from './modules/auth/schemas/usuario.schema';
 import { QaCasosController } from './modules/qa/qa-casos.controller';
 import { QaCasosService } from './modules/qa/qa-casos.service';
+import { QaDatasetsController } from './modules/qa/qa-datasets.controller';
+import { QaDatasetsService } from './modules/qa/qa-datasets.service';
+import { QaRunnerController } from './modules/qa/qa-runner.controller';
+import { QaRunnerService } from './modules/qa/qa-runner.service';
 import { QaCaso, QaCasoSchema } from './modules/qa/schemas/qa-caso.schema';
+import { QaEjecucion, QaEjecucionSchema } from './modules/qa/schemas/qa-ejecucion.schema';
 
 @Module({
   imports: [
@@ -41,9 +46,10 @@ import { QaCaso, QaCasoSchema } from './modules/qa/schemas/qa-caso.schema';
       {name:Cliente.name,schema:ClienteSchema},{name:Legajo.name,schema:LegajoSchema},{name:ParametroNormativo.name,schema:ParametroNormativoSchema},{name:EscalaArt94.name,schema:EscalaArt94Schema},
       {name:Usuario.name,schema:UsuarioSchema},
       {name:QaCaso.name,schema:QaCasoSchema},
+      {name:QaEjecucion.name,schema:QaEjecucionSchema},
     ]),
   ],
-  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController],
+  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaDatasetsController, QaRunnerController],
   providers: [
     AuthService,
     AuthGuard,
@@ -63,6 +69,8 @@ import { QaCaso, QaCasoSchema } from './modules/qa/schemas/qa-caso.schema';
     ReporteService,
     AnalisisService,
     QaCasosService,
+    QaDatasetsService,
+    QaRunnerService,
   ],
 })
 export class AppModule {}

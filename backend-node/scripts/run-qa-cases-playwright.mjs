@@ -12,6 +12,8 @@ const apiUrl = (process.env.AUDITORIA_API_URL ?? 'http://localhost:8001/api').re
 let frontendUrl = (process.env.AUDITORIA_FRONTEND_URL ?? 'http://localhost:4200').replace(/\/$/, '');
 const frontendUrlConfigurado = Boolean(process.env.AUDITORIA_FRONTEND_URL);
 const mongodbUri = process.env.MONGODB_URI ?? process.env.AUDITORIA_MONGODB_URI ?? 'mongodb://127.0.0.1:27017/auditoria_ganancias';
+const datasetsMongoUri = process.env.QA_DATASETS_MONGODB_URI ?? process.env.DATASETS_MONGODB_URI ?? 'mongodb://127.0.0.1:27017/qa_agentico_esueldos';
+const datasetsCollection = process.env.QA_DATASETS_COLLECTION ?? 'datasets';
 const correo = process.env.AUDITORIA_QA_CORREO ?? 'qa-local@auditoria.test';
 const contrasena = process.env.AUDITORIA_QA_PASSWORD ?? 'qa-local-123456';
 const casoId = process.env.AUDITORIA_QA_CASE;
@@ -29,8 +31,10 @@ const demoFinalPauseMs = Number(process.env.PLAYWRIGHT_DEMO_FINAL_PAUSE_MS ?? (m
 const cargarFormularioQa = modoDemo || process.env.AUDITORIA_QA_CARGAR_FORM === 'true';
 
 const capturas = [];
+const capturasFallidas = [];
 let browser;
 let page;
+let datasetsConnection;
 
 try {
   await mkdir(outputDir, { recursive: true });
@@ -69,6 +73,7 @@ try {
     frontend_url: frontendUrl,
     api_url: apiUrl,
     mongodb_uri: ocultarMongo(mongodbUri),
+    datasets_mongodb_uri: ocultarMongo(datasetsMongoUri),
     excel_dir: excelDir,
     caso_filtro: casoId ?? null,
     modo_demo: modoDemo,
@@ -76,6 +81,7 @@ try {
     slow_mo_ms: slowMoMs,
     resultados,
     capturas,
+    capturas_fallidas: capturasFallidas,
     fecha: new Date().toISOString(),
   }, null, 2)}\n`, 'utf8');
 
@@ -99,12 +105,14 @@ try {
   process.exitCode = 1;
 } finally {
   await browser?.close().catch(() => undefined);
+  await datasetsConnection?.close().catch(() => undefined);
   await mongoose.disconnect().catch(() => undefined);
 }
 
 async function ejecutarCaso(caso) {
   const casoSeguro = nombreSeguro(caso.id);
   try {
+    const dataset = await resolverDatasetCaso(caso);
     const excelPath = resolverExcel(caso);
     if (cargarFormularioQa) {
       await cargarCasoQaPorUi(caso, excelPath, casoSeguro);
@@ -125,6 +133,7 @@ async function ejecutarCaso(caso) {
     return {
       estado: 'verde',
       caso: caso.id,
+      dataset,
       snapshot_id: snapshotId,
       archivo: basename(excelPath),
       assertions: verificaciones,
@@ -150,6 +159,8 @@ async function ejecutarCaso(caso) {
 async function cargarCasoQaPorUi(caso, excelPath, casoSeguro) {
   await page.goto(`${frontendUrl}/qa/pantalla-1`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: /QA - Pantalla 1/i }).waitFor({ state: 'visible' });
+  await page.locator('select[name="datasetCodigo"]').waitFor({ state: 'visible' });
+  await page.locator('select[name="datasetCodigo"] option').filter({ hasText: caso.dataset_codigo }).first().waitFor({ state: 'attached' });
   await pausaDemo();
 
   await page.getByRole('button', { name: /Nuevo limpio/i }).click();
@@ -189,8 +200,8 @@ async function completarFormularioQa(caso) {
   const tolerancia = resultado.tolerancia ?? assertionPrincipal.tolerancia ?? 0.05;
 
   await llenarInput('idCaso', caso.id);
-  await llenarInput('datasetCodigo', caso.dataset_codigo);
-  await llenarInput('periodo', caso.periodo);
+  await elegirSelect('datasetCodigo', caso.dataset_codigo);
+  await verificarInputValue('periodo', caso.periodo);
   await llenarInput('clienteNombre', datosCliente.cliente_nombre);
   await elegirSelect('modoSaldoFavor', datosCliente.modo_saldo_favor);
   await llenarInput('descripcion', caso.descripcion);
@@ -385,6 +396,80 @@ function resolverCampo(origen, campo) {
   }, origen);
 }
 
+async function resolverDatasetCaso(caso) {
+  const codigo = texto(caso.dataset_codigo);
+  if (!codigo) throw new Error(`El caso ${caso.id} no tiene dataset_codigo.`);
+
+  const collection = await obtenerColeccionDatasets();
+  const doc = await collection.findOne({ codigo }, {
+    projection: {
+      _id: 0,
+      codigo: 1,
+      convenio: 1,
+      periodo: 1,
+      vigencia: 1,
+      validado_por: 1,
+      validado_en: 1,
+      fuente_normativa: 1,
+      estado: 1,
+    },
+  });
+  if (!doc) throw new Error(`Dataset ${codigo} no existe en ${ocultarMongo(datasetsMongoUri)}.`);
+
+  const dataset = serializarDataset(doc);
+  const errores = validarDatasetQa(dataset);
+  const periodoDataset = normalizarPeriodo(dataset.periodo);
+  const periodoCaso = normalizarPeriodo(caso.periodo);
+  if (periodoDataset && periodoCaso && periodoDataset !== periodoCaso) {
+    errores.push(`periodo caso=${caso.periodo} distinto de dataset=${dataset.periodo}`);
+  }
+
+  if (errores.length) {
+    throw new Error(`Dataset ${codigo} no válido para ${caso.id}: ${errores.join('; ')}`);
+  }
+  return dataset;
+}
+
+async function obtenerColeccionDatasets() {
+  if (!datasetsConnection) {
+    datasetsConnection = await mongoose.createConnection(datasetsMongoUri, { serverSelectionTimeoutMS: 5000 }).asPromise();
+  }
+  return datasetsConnection.collection(datasetsCollection);
+}
+
+function serializarDataset(doc) {
+  return {
+    codigo: texto(doc.codigo),
+    convenio: texto(doc.convenio),
+    periodo: texto(doc.periodo),
+    vigencia: objeto(doc.vigencia),
+    validado_por: texto(doc.validado_por),
+    validado_en: texto(doc.validado_en),
+    fuente_normativa: objeto(doc.fuente_normativa),
+    estado: texto(doc.estado) || 'validado',
+  };
+}
+
+function validarDatasetQa(dataset) {
+  const errores = [];
+  if (!dataset.codigo) errores.push('codigo obligatorio');
+  if (!/^DS-[A-Z0-9_-]+$/i.test(dataset.codigo)) errores.push('codigo debe comenzar con DS-');
+  if (!dataset.convenio) errores.push('convenio obligatorio');
+  if (!normalizarPeriodo(dataset.periodo)) errores.push('periodo debe tener formato MM/AAAA');
+  if (!texto(dataset.vigencia.desde)) errores.push('vigencia.desde obligatorio');
+  if (!dataset.validado_por) errores.push('validado_por obligatorio');
+  if (!dataset.validado_en || Number.isNaN(Date.parse(dataset.validado_en))) errores.push('validado_en ISO obligatorio');
+  if (!texto(dataset.fuente_normativa.ref)) errores.push('fuente_normativa.ref obligatorio');
+  if (dataset.estado && dataset.estado !== 'validado') errores.push(`estado debe ser validado; actual=${dataset.estado}`);
+  return errores;
+}
+
+function normalizarPeriodo(periodo) {
+  const match = /^(0?[1-9]|1[0-2])\/(20\d{2})$/.exec(texto(periodo));
+  if (!match) return '';
+  return `${match[1].padStart(2, '0')}/${match[2]}`;
+}
+
 function resolverExcel(caso) {
   const nombre = texto(caso.archivo?.nombre);
   if (!nombre) throw new Error('El caso no tiene archivo.nombre configurado.');
@@ -441,9 +526,14 @@ function etiquetaCampoResultado(campo) {
 
 async function tomarCaptura(nombre) {
   const destino = join(outputDir, `${nombreSeguro(nombre)}.png`);
-  await page.screenshot({ path: destino, fullPage: true });
-  capturas.push(destino);
-  return destino;
+  try {
+    await page.screenshot({ path: destino, fullPage: false, animations: 'disabled', timeout: 20_000 });
+    capturas.push(destino);
+    return destino;
+  } catch (error) {
+    capturasFallidas.push({ nombre, destino, error: detalleError(error) });
+    return null;
+  }
 }
 
 async function mostrarResultadoDemo({ estado, caso, detalle, verificaciones }) {
@@ -605,6 +695,17 @@ async function llenarInput(name, valor) {
   await input.scrollIntoViewIfNeeded();
   await input.fill(texto(valor));
   await pausaDemo(0.35);
+}
+
+async function verificarInputValue(name, valor) {
+  const esperado = texto(valor);
+  const input = page.locator(`input[name="${name}"]`);
+  await input.scrollIntoViewIfNeeded();
+  await page.waitForFunction(
+    ({ selector, expected }) => document.querySelector(selector)?.value === expected,
+    { selector: `input[name="${name}"]`, expected: esperado },
+  );
+  await pausaDemo(0.2);
 }
 
 async function elegirSelect(name, valor, etiqueta = '') {
