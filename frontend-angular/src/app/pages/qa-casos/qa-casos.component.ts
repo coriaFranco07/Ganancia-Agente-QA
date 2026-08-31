@@ -1,7 +1,26 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { Subscription, timer } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
+
+/** Textos del paginador en castellano, scoped a este componente. */
+function paginadorEnCastellano(): MatPaginatorIntl {
+  const intl = new MatPaginatorIntl();
+  intl.itemsPerPageLabel = 'Casos por página:';
+  intl.nextPageLabel = 'Página siguiente';
+  intl.previousPageLabel = 'Página anterior';
+  intl.firstPageLabel = 'Primera página';
+  intl.lastPageLabel = 'Última página';
+  intl.getRangeLabel = (page: number, pageSize: number, length: number): string => {
+    if (length === 0 || pageSize === 0) return `0 de ${length}`;
+    const total = Math.max(length, 0);
+    const inicio = page * pageSize;
+    const fin = Math.min(inicio + pageSize, total);
+    return `${inicio + 1} – ${fin} de ${total}`;
+  };
+  return intl;
+}
 
 interface CampoFuente {
   clave: string;
@@ -35,7 +54,8 @@ interface EjecucionQa {
   caso_id: string;
   estado: EstadoEjecucionQa;
   detalle: string;
-  capturas: string[];
+  // Ejecuciones viejas en Mongo no tienen este campo: nunca asumir que existe.
+  capturas?: string[];
 }
 
 interface CapturaAbierta {
@@ -88,6 +108,7 @@ interface CapturaAbierta {
             <input
               type="text"
               [(ngModel)]="filtroTexto"
+              (ngModelChange)="paginaActual = 0"
               data-testid="qa-casos-search-input"
               placeholder="Buscar por cualquier dato del caso...">
           </label>
@@ -116,7 +137,7 @@ interface CapturaAbierta {
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let caso of casosFiltrados; trackBy: trackByCaso" [attr.data-testid]="'qa-casos-row-' + caso.id">
+              <tr *ngFor="let caso of casosPaginados; trackBy: trackByCaso" [attr.data-testid]="'qa-casos-row-' + caso.id">
                 <td class="col-id">
                   <strong>{{ caso.id }}</strong>
                   <span *ngIf="caso.descripcion">{{ caso.descripcion }}</span>
@@ -176,9 +197,17 @@ interface CapturaAbierta {
           </table>
         </div>
 
-        <div class="table-footer" *ngIf="!cargandoCasos && casosFiltrados.length > 0">
-          {{ casosFiltrados.length }} de {{ casos.length }} caso(s)
-        </div>
+        <mat-paginator
+          *ngIf="!cargandoCasos && casosFiltrados.length > 0"
+          data-testid="qa-casos-paginator"
+          class="table-paginator"
+          [length]="casosFiltrados.length"
+          [pageSize]="tamanoPagina"
+          [pageSizeOptions]="tamanosPagina"
+          [pageIndex]="paginaActual"
+          showFirstLastButtons
+          (page)="onPaginar($event)">
+        </mat-paginator>
       </section>
 
       <section class="empty-state page-empty" *ngIf="!cargandoFuentes && fuentes.length === 0">
@@ -213,7 +242,16 @@ interface CapturaAbierta {
               (click)="moverCaptura(-1)">
               <mat-icon>chevron_left</mat-icon>
             </button>
-            <img [src]="captura.url" [alt]="captura.nombre">
+            <img
+              *ngIf="!capturaConError"
+              [src]="captura.url"
+              [alt]="captura.nombre"
+              (error)="capturaConError = true"
+              (load)="capturaConError = false">
+            <div class="captura-error" *ngIf="capturaConError">
+              <mat-icon>broken_image</mat-icon>
+              <span>No se pudo cargar la captura. Puede que el archivo ya no exista en disco.</span>
+            </div>
             <button
               mat-icon-button
               type="button"
@@ -565,11 +603,29 @@ interface CapturaAbierta {
 
     .captura-modal-body {
       position: relative;
-      min-height: 0;
+      min-height: 420px;
       display: grid;
       place-items: center;
       padding: 16px 58px;
       background: #f8fafc;
+    }
+
+    .captura-error {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+      max-width: 320px;
+      color: #64748b;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .captura-error mat-icon {
+      color: #94a3b8;
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
     }
 
     .captura-modal-body img {
@@ -626,13 +682,9 @@ interface CapturaAbierta {
       color: #b91c1c;
     }
 
-    .table-footer {
-      padding: 12px 22px;
+    .table-paginator {
       border-top: 1px solid #e2e8f0;
       background: #f8fbff;
-      color: #64748b;
-      font-size: 11px;
-      font-weight: 850;
     }
 
     @media (max-width: 720px) {
@@ -641,6 +693,7 @@ interface CapturaAbierta {
       .search-box { min-width: 0; }
     }
   `],
+  providers: [{ provide: MatPaginatorIntl, useFactory: paginadorEnCastellano }],
 })
 export class QaCasosComponent implements OnInit, OnDestroy {
   fuentes: FuenteCasos[] = [];
@@ -652,6 +705,10 @@ export class QaCasosComponent implements OnInit, OnDestroy {
   cargandoCasos = false;
   eliminandoId = '';
   capturaAbierta: CapturaAbierta | null = null;
+  capturaConError = false;
+  paginaActual = 0;
+  tamanoPagina = 10;
+  readonly tamanosPagina = [10, 25, 50, 100];
 
   private ejecucionesPorCaso = new Map<string, EjecucionQa>();
   private readonly casosCorriendo = new Set<string>();
@@ -681,6 +738,17 @@ export class QaCasosComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Solo la porción de la página actual: la tabla nunca muestra el listado completo. */
+  get casosPaginados(): CasoFila[] {
+    const inicio = this.paginaActual * this.tamanoPagina;
+    return this.casosFiltrados.slice(inicio, inicio + this.tamanoPagina);
+  }
+
+  onPaginar(evento: PageEvent): void {
+    this.paginaActual = evento.pageIndex;
+    this.tamanoPagina = evento.pageSize;
+  }
+
   refrescar(): void {
     this.cargarFuentes();
   }
@@ -689,6 +757,7 @@ export class QaCasosComponent implements OnInit, OnDestroy {
     if (this.pantallaSeleccionada?.ruta === fuente.ruta) return;
     this.pantallaSeleccionada = fuente;
     this.filtroTexto = '';
+    this.paginaActual = 0;
     this.cargarCasos(fuente);
     if (fuente.ejecutable) this.cargarEjecuciones();
   }
@@ -719,7 +788,7 @@ export class QaCasosComponent implements OnInit, OnDestroy {
   }
 
   tieneCapturas(casoId: string): boolean {
-    return (this.ultimaEjecucion(casoId)?.capturas.length ?? 0) > 0;
+    return (this.ultimaEjecucion(casoId)?.capturas?.length ?? 0) > 0;
   }
 
   estadoClase(casoId: string): string {
@@ -734,7 +803,7 @@ export class QaCasosComponent implements OnInit, OnDestroy {
 
   abrirImagenes(casoId: string): void {
     const ejecucion = this.ultimaEjecucion(casoId);
-    if (!ejecucion || ejecucion.capturas.length === 0) return;
+    if (!ejecucion?.capturas?.length) return;
     this.mostrarCaptura(ejecucion, 0);
   }
 
@@ -748,14 +817,14 @@ export class QaCasosComponent implements OnInit, OnDestroy {
 
   totalCapturas(): number {
     if (!this.capturaAbierta) return 0;
-    return this.ultimaEjecucion(this.capturaAbierta.casoId)?.capturas.length ?? 0;
+    return this.ultimaEjecucion(this.capturaAbierta.casoId)?.capturas?.length ?? 0;
   }
 
   moverCaptura(paso: number): void {
     if (!this.capturaAbierta) return;
     const ejecucion = this.ultimaEjecucion(this.capturaAbierta.casoId);
-    if (!ejecucion) return;
-    const total = ejecucion.capturas.length;
+    const total = ejecucion?.capturas?.length ?? 0;
+    if (!ejecucion || total === 0) return;
     const siguiente = (this.capturaAbierta.indice + paso + total) % total;
     this.mostrarCaptura(ejecucion, siguiente);
   }
@@ -779,6 +848,9 @@ export class QaCasosComponent implements OnInit, OnDestroy {
         if (this.pantallaSeleccionada) {
           this.totalPorRuta[this.pantallaSeleccionada.ruta] = this.casos.length;
         }
+        // Si el borrado deja la página actual vacía, retrocede en vez de mostrarla en blanco.
+        const ultimaPagina = Math.max(0, Math.ceil(this.casosFiltrados.length / this.tamanoPagina) - 1);
+        if (this.paginaActual > ultimaPagina) this.paginaActual = ultimaPagina;
       },
       error: () => {
         alert('No pude eliminar el caso. Probá de nuevo.');
@@ -845,7 +917,8 @@ export class QaCasosComponent implements OnInit, OnDestroy {
   }
 
   private mostrarCaptura(ejecucion: EjecucionQa, indice: number): void {
-    const nombre = ejecucion.capturas[indice]?.split(/[\\/]/).pop() ?? `captura-${indice + 1}.png`;
+    const nombre = ejecucion.capturas?.[indice]?.split(/[\\/]/).pop() ?? `captura-${indice + 1}.png`;
+    this.capturaConError = false;
     this.capturaAbierta = {
       casoId: ejecucion.caso_id,
       indice,
