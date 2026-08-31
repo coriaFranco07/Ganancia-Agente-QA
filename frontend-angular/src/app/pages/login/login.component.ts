@@ -21,6 +21,7 @@ import { AuthService } from '../../core/services/auth.service';
             <label class="campo-login">
               <mat-icon>mail</mat-icon>
               <input
+                data-testid="auth-email-input"
                 type="email"
                 formControlName="correo"
                 autocomplete="username"
@@ -31,12 +32,14 @@ import { AuthService } from '../../core/services/auth.service';
             <label class="campo-login">
               <mat-icon>lock</mat-icon>
               <input
+                data-testid="auth-password-input"
                 [type]="mostrarContrasena ? 'text' : 'password'"
                 formControlName="contrasena"
                 autocomplete="current-password"
                 placeholder="Contraseña"
                 aria-label="Contraseña" />
               <button
+                data-testid="auth-password-toggle"
                 type="button"
                 class="ver-password"
                 (click)="mostrarContrasena = !mostrarContrasena"
@@ -45,12 +48,12 @@ import { AuthService } from '../../core/services/auth.service';
               </button>
             </label>
 
-            <div *ngIf="error" class="error-login">
+            <div *ngIf="error" class="error-login" data-testid="auth-error">
               <mat-icon>error_outline</mat-icon>
               <span>{{ error }}</span>
             </div>
 
-            <button type="submit" class="btn-login" [disabled]="form.invalid || cargando">
+            <button data-testid="auth-submit-button" type="submit" class="btn-login" [disabled]="form.invalid || cargando">
               <mat-spinner *ngIf="cargando" diameter="18"></mat-spinner>
               <mat-icon *ngIf="!cargando">lock</mat-icon>
               {{ cargando ? 'Ingresando...' : 'Iniciar sesión' }}

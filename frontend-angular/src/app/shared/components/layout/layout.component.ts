@@ -29,10 +29,81 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             [routerLink]="item.ruta"
             routerLinkActive="activo"
             class="menu-link"
+            [attr.data-testid]="'nav-' + item.id"
             (click)="cerrarMenuSiMobile()">
             <mat-icon>{{ item.icono }}</mat-icon>
             <span>{{ item.texto }}</span>
           </a>
+
+          <button
+            mat-button
+            type="button"
+            class="menu-link menu-toggle"
+            data-testid="nav-qa-toggle"
+            [class.abierto]="qaAbierto"
+            (click)="toggleQa()"
+            aria-label="Abrir menú QA">
+            <mat-icon>science</mat-icon>
+            <span>QA</span>
+            <mat-icon class="chevron">expand_more</mat-icon>
+          </button>
+
+          <div *ngIf="qaAbierto" class="submenu">
+            <a
+              mat-button
+              routerLink="/qa/asistente"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-asistente"
+              (click)="cerrarMenuSiMobile()">
+              Asistente QA
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/pantalla-1"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-pantalla-1"
+              (click)="cerrarMenuSiMobile()">
+              Pantalla 1
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/pantalla-2"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-pantalla-2"
+              (click)="cerrarMenuSiMobile()">
+              Pantalla 2
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/pantalla-3"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-pantalla-3"
+              (click)="cerrarMenuSiMobile()">
+              Pantalla 3
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/sop-loom"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-sop-loom"
+              (click)="cerrarMenuSiMobile()">
+              SOP Loom
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/casos"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-casos"
+              (click)="cerrarMenuSiMobile()">
+              Casos
+            </a>
+          </div>
         </nav>
 
         <div class="version">
@@ -48,6 +119,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             mat-icon-button
             type="button"
             class="boton-menu"
+            data-testid="layout-menu-button"
             (click)="sidenav.toggle()"
             aria-label="Abrir menú principal">
             <mat-icon>menu</mat-icon>
@@ -61,7 +133,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             <span>{{ usuario.correo }}</span>
           </div>
 
-          <button mat-button type="button" class="logout" (click)="cerrarSesion()">
+          <button mat-button type="button" class="logout" data-testid="auth-logout-button" (click)="cerrarSesion()">
             <mat-icon>logout</mat-icon>
             <span>Cerrar sesión</span>
           </button>
@@ -97,6 +169,32 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
     .menu-link mat-icon { margin-right: 10px; color: #0f1b3d; font-size: 20px; width: 20px; height: 20px; }
     .menu-link.activo { background: #eff6ff; color: #2563eb; }
     .menu-link.activo mat-icon { color: #2563eb; }
+    .menu-toggle .chevron {
+      margin-left: auto;
+      margin-right: 0;
+      transition: transform 160ms ease;
+    }
+    .menu-toggle.abierto .chevron { transform: rotate(180deg); }
+    .submenu {
+      display: grid;
+      gap: 4px;
+      margin: -2px 0 4px 34px;
+      padding-left: 10px;
+      border-left: 1px solid #dbeafe;
+    }
+    .submenu-link {
+      width: 100%;
+      height: 34px;
+      justify-content: flex-start;
+      border-radius: 10px;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 850;
+    }
+    .submenu-link.activo {
+      background: #eff6ff;
+      color: #2563eb;
+    }
     .version { position: absolute; left: 20px; bottom: 20px; color: #64748b; font-size: 12px; line-height: 1.35; }
     .version b { color: #0f172a; }
     .contenido { min-width: 0; background: #f8fafc; }
@@ -124,15 +222,16 @@ export class LayoutComponent {
   esMobile = this.calcularEsMobile();
   usuario: UsuarioAutenticado | null = null;
   logoRoto = false;
+  qaAbierto = false;
 
   items = [
-    { ruta: '/inicio', icono: 'home', texto: 'Inicio' },
-    { ruta: '/cargar-excel', icono: 'cloud_upload', texto: 'Cargar Excel' },
-    { ruta: '/analisis', icono: 'analytics', texto: 'Análisis' },
-    { ruta: '/calculo', icono: 'calculate', texto: 'Cálculo' },
-    { ruta: '/diagnosticos', icono: 'fact_check', texto: 'Diagnósticos' },
-    { ruta: '/historial', icono: 'history', texto: 'Historial' },
-    { ruta: '/configuracion', icono: 'settings', texto: 'Configuración' },
+    { id: 'inicio', ruta: '/inicio', icono: 'home', texto: 'Inicio' },
+    { id: 'cargar-excel', ruta: '/cargar-excel', icono: 'cloud_upload', texto: 'Cargar Excel' },
+    { id: 'analisis', ruta: '/analisis', icono: 'analytics', texto: 'Análisis' },
+    { id: 'calculo', ruta: '/calculo', icono: 'calculate', texto: 'Cálculo' },
+    { id: 'diagnosticos', ruta: '/diagnosticos', icono: 'fact_check', texto: 'Diagnósticos' },
+    { id: 'historial', ruta: '/historial', icono: 'history', texto: 'Historial' },
+    { id: 'configuracion', ruta: '/configuracion', icono: 'settings', texto: 'Configuración' },
   ];
 
   constructor(private auth: AuthService, private router: Router, private dialog: MatDialog) {
@@ -157,6 +256,10 @@ export class LayoutComponent {
     if (this.esMobile) {
       void this.sidenav?.close();
     }
+  }
+
+  toggleQa(): void {
+    this.qaAbierto = !this.qaAbierto;
   }
 
   cerrarSesion(): void {

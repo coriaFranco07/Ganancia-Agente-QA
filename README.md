@@ -272,6 +272,16 @@ npm install
 npm run build
 ```
 
+QA Playwright:
+
+```powershell
+cd backend-node
+$env:AUDITORIA_QA_EXCEL_DIR="C:\Users\Lenovo Ideapad\Downloads"
+npm run qa:playwright
+```
+
+La guia completa esta en `docs/qa_playwright.md`.
+
 Si hay Chrome disponible:
 
 ```powershell

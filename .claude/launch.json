@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend-node",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "backend-node", "run", "start:dev"],
+      "port": 8001
+    },
+    {
+      "name": "frontend-angular",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend-angular", "start"],
+      "port": 4200
+    }
+  ]
+}
