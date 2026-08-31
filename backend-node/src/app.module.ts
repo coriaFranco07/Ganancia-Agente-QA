@@ -30,12 +30,27 @@ import { AuthService } from './modules/auth/auth.service';
 import { Usuario, UsuarioSchema } from './modules/auth/schemas/usuario.schema';
 import { QaCasosController } from './modules/qa/qa-casos.controller';
 import { QaCasosService } from './modules/qa/qa-casos.service';
+import { QaAsistenteController } from './modules/qa/qa-asistente.controller';
+import { QaAsistenteService } from './modules/qa/qa-asistente.service';
+import { QaCorreccionAsistidaService } from './modules/qa/qa-correccion-asistida.service';
+import { QaDefinicionesTecnicasController } from './modules/qa/qa-definiciones-tecnicas.controller';
+import { QaDefinicionesTecnicasService } from './modules/qa/qa-definiciones-tecnicas.service';
 import { QaDatasetsController } from './modules/qa/qa-datasets.controller';
 import { QaDatasetsService } from './modules/qa/qa-datasets.service';
 import { QaRunnerController } from './modules/qa/qa-runner.controller';
 import { QaRunnerService } from './modules/qa/qa-runner.service';
+import { QaHallazgosController } from './modules/qa/qa-hallazgos.controller';
+import { QaHallazgosService } from './modules/qa/qa-hallazgos.service';
+import { QaSopLoomController } from './modules/qa/qa-sop-loom.controller';
+import { QaSopLoomService } from './modules/qa/qa-sop-loom.service';
+import { QaPantallaInspectorService } from './modules/qa/qa-pantalla-inspector.service';
 import { QaCaso, QaCasoSchema } from './modules/qa/schemas/qa-caso.schema';
+import { QaDefinicionTecnica, QaDefinicionTecnicaSchema } from './modules/qa/schemas/qa-definicion-tecnica.schema';
 import { QaEjecucion, QaEjecucionSchema } from './modules/qa/schemas/qa-ejecucion.schema';
+import { QaHallazgo, QaHallazgoSchema } from './modules/qa/schemas/qa-hallazgo.schema';
+import { QaPlanAsistente, QaPlanAsistenteSchema } from './modules/qa/schemas/qa-plan-asistente.schema';
+import { QaSopLoomAprendizaje, QaSopLoomAprendizajeSchema } from './modules/qa/schemas/qa-sop-loom-aprendizaje.schema';
+import { QaInspeccionPantalla, QaInspeccionPantallaSchema } from './modules/qa/schemas/qa-inspeccion-pantalla.schema';
 
 @Module({
   imports: [
@@ -46,10 +61,15 @@ import { QaEjecucion, QaEjecucionSchema } from './modules/qa/schemas/qa-ejecucio
       {name:Cliente.name,schema:ClienteSchema},{name:Legajo.name,schema:LegajoSchema},{name:ParametroNormativo.name,schema:ParametroNormativoSchema},{name:EscalaArt94.name,schema:EscalaArt94Schema},
       {name:Usuario.name,schema:UsuarioSchema},
       {name:QaCaso.name,schema:QaCasoSchema},
+      {name:QaDefinicionTecnica.name,schema:QaDefinicionTecnicaSchema},
       {name:QaEjecucion.name,schema:QaEjecucionSchema},
+      {name:QaHallazgo.name,schema:QaHallazgoSchema},
+      {name:QaPlanAsistente.name,schema:QaPlanAsistenteSchema},
+      {name:QaSopLoomAprendizaje.name,schema:QaSopLoomAprendizajeSchema},
+      {name:QaInspeccionPantalla.name,schema:QaInspeccionPantallaSchema},
     ]),
   ],
-  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaDatasetsController, QaRunnerController],
+  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController],
   providers: [
     AuthService,
     AuthGuard,
@@ -69,8 +89,14 @@ import { QaEjecucion, QaEjecucionSchema } from './modules/qa/schemas/qa-ejecucio
     ReporteService,
     AnalisisService,
     QaCasosService,
+    QaAsistenteService,
+    QaCorreccionAsistidaService,
+    QaDefinicionesTecnicasService,
     QaDatasetsService,
     QaRunnerService,
+    QaHallazgosService,
+    QaSopLoomService,
+    QaPantallaInspectorService,
   ],
 })
 export class AppModule {}

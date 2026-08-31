@@ -6,8 +6,8 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
 @Component({
   selector: 'app-cargar-excel',
   template: `
-    <main class="carga-page">
-      <div *ngIf="animandoMotor" class="motor-overlay">
+    <main class="carga-page" data-testid="carga-excel-page">
+      <div *ngIf="animandoMotor" class="motor-overlay" data-testid="carga-excel-motor-overlay">
         <div class="motor-card">
           <div class="motor-loader" aria-label="Motor de análisis ejecutándose">
             <div class="orbita orbita-a"></div>
@@ -39,15 +39,16 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
         <p>Cargue el reporte salarial para procesar y validar el Impuesto a las Ganancias.</p>
       </section>
 
-      <mat-card class="upload-card">
+      <mat-card class="upload-card" data-testid="carga-excel-upload-card">
         <div
           class="drop-zone"
+          data-testid="carga-excel-dropzone"
           [class.drop-zone-activa]="isDragging || archivo"
           (dragover)="onDragOver($event)"
           (dragleave)="onDragLeave()"
           (drop)="soltar($event)"
           (click)="!archivo && fileInput.click()">
-          <input #fileInput hidden type="file" accept=".xlsx" (change)="seleccionar($event)">
+          <input #fileInput hidden type="file" accept=".xlsx" data-testid="carga-excel-file-input" (change)="seleccionar($event)">
 
           <ng-container *ngIf="!archivo; else archivoSeleccionado">
             <div class="upload-icon">
@@ -63,6 +64,7 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
               color="primary"
               type="button"
               class="buscar-btn"
+              data-testid="carga-excel-file-button"
               (click)="$event.stopPropagation(); fileInput.click()">
               <mat-icon>folder</mat-icon>
               Buscar Archivo
@@ -82,6 +84,7 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
                 mat-icon-button
                 color="warn"
                 type="button"
+                data-testid="carga-excel-file-remove-button"
                 (click)="$event.stopPropagation(); removerArchivo(fileInput)"
                 title="Quitar archivo">
                 <mat-icon>delete</mat-icon>
@@ -91,7 +94,7 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
         </div>
       </mat-card>
 
-      <mat-card class="datos-card">
+      <mat-card class="datos-card" data-testid="carga-excel-context-card">
         <div class="datos-header">
           <div class="datos-icon">
             <mat-icon>badge</mat-icon>
@@ -110,6 +113,7 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
             <input
               [(ngModel)]="clienteNombre"
               name="clienteNombre"
+              data-testid="carga-excel-cliente-input"
               placeholder="Cliente"
               aria-label="Cliente">
           </label>
@@ -119,6 +123,7 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
             <input
               [(ngModel)]="legajoNumero"
               name="legajoNumero"
+              data-testid="carga-excel-legajo-input"
               placeholder="Legajo"
               aria-label="Legajo">
           </label>
@@ -131,13 +136,14 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
               max="2035"
               [(ngModel)]="periodoFiscal"
               name="periodoFiscal"
+              data-testid="carga-excel-periodo-fiscal-input"
               placeholder="Período fiscal"
               aria-label="Período fiscal">
           </label>
 
           <label class="campo-auditoria campo-select">
             <mat-icon>event</mat-icon>
-            <select [(ngModel)]="mesLiquidacion" name="mesLiquidacion" aria-label="Mes de liquidación">
+            <select [(ngModel)]="mesLiquidacion" name="mesLiquidacion" data-testid="carga-excel-mes-liquidacion-select" aria-label="Mes de liquidación">
               <option [ngValue]="null">Mes de liquidación</option>
               <option *ngFor="let mes of meses" [ngValue]="mes.valor">{{ mes.nombre }}</option>
             </select>
@@ -170,7 +176,7 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
         </div>
       </mat-card>
 
-      <div *ngIf="error" class="error-box">
+      <div *ngIf="error" class="error-box" data-testid="carga-excel-error">
         <mat-icon>error_outline</mat-icon>
         <span>{{ error }}</span>
       </div>
@@ -181,6 +187,7 @@ import { EstadoAnalisisService } from '../../core/services/estado-analisis.servi
           color="primary"
           type="button"
           class="ejecutar-btn"
+          data-testid="carga-excel-run-button"
           [disabled]="!puedeAnalizar()"
           (click)="analizar()">
           <mat-spinner *ngIf="cargando" diameter="20" color="accent"></mat-spinner>

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { QaRunnerService } from './qa-runner.service';
 
@@ -20,5 +21,14 @@ export class QaRunnerController {
   @Get('ejecuciones/:id')
   obtener(@Param('id') id: string) {
     return this.service.obtener(id);
+  }
+
+  @Get('ejecuciones/:id/capturas/:index')
+  async captura(@Param('id') id: string, @Param('index') index: string, @Res() response: Response) {
+    const captura = await this.service.obtenerCaptura(id, index);
+    response.type('image/png');
+    response.setHeader('Cache-Control', 'private, max-age=60');
+    response.setHeader('Content-Disposition', `inline; filename="${captura.nombre}"`);
+    return response.sendFile(captura.path);
   }
 }

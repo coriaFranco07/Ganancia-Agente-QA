@@ -13,8 +13,11 @@
     "test:golden": "jest --runInBand --config test/jest-golden.json",
     "test:e2e": "jest --runInBand --config test/jest-e2e.json",
     "test:mongo": "jest --runInBand --config test/jest-mongo.json",
+    "qa:chat:e2e": "node scripts/run-qa-chat-e2e.mjs",
     "qa:playwright": "node scripts/run-qa-cases-playwright.mjs",
     "qa:playwright:demo": "node scripts/run-qa-cases-playwright.mjs --demo",
+    "qa:sop-loom": "node scripts/run-qa-sop-loom-playwright.mjs",
+    "qa:sop-loom:demo": "node scripts/run-qa-sop-loom-playwright.mjs --demo",
     "usuario:crear": "ts-node scripts/crear-usuario.ts"
   },
   "dependencies": {
@@ -29,6 +32,7 @@
     "exceljs": "4.4.0",
     "mongoose": "7.8.7",
     "multer": "1.4.5-lts.2",
+    "playwright-core": "1.46.0",
     "reflect-metadata": "0.1.14",
     "rxjs": "7.8.2",
     "xlsx": "^0.18.5"
@@ -44,7 +48,6 @@
     "@types/supertest": "6.0.2",
     "jest": "29.7.0",
     "mongodb-memory-server": "^8.16.1",
-    "playwright-core": "1.46.0",
     "source-map-support": "0.5.21",
     "supertest": "7.0.0",
     "ts-jest": "29.2.5",

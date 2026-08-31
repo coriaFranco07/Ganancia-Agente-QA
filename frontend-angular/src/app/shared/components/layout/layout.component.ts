@@ -29,6 +29,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             [routerLink]="item.ruta"
             routerLinkActive="activo"
             class="menu-link"
+            [attr.data-testid]="'nav-' + item.id"
             (click)="cerrarMenuSiMobile()">
             <mat-icon>{{ item.icono }}</mat-icon>
             <span>{{ item.texto }}</span>
@@ -38,6 +39,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             mat-button
             type="button"
             class="menu-link menu-toggle"
+            data-testid="nav-qa-toggle"
             [class.abierto]="qaAbierto"
             (click)="toggleQa()"
             aria-label="Abrir menú QA">
@@ -49,9 +51,19 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
           <div *ngIf="qaAbierto" class="submenu">
             <a
               mat-button
+              routerLink="/qa/asistente"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-asistente"
+              (click)="cerrarMenuSiMobile()">
+              Asistente QA
+            </a>
+            <a
+              mat-button
               routerLink="/qa/pantalla-1"
               routerLinkActive="activo"
               class="submenu-link"
+              data-testid="nav-qa-pantalla-1"
               (click)="cerrarMenuSiMobile()">
               Pantalla 1
             </a>
@@ -60,8 +72,36 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
               routerLink="/qa/pantalla-2"
               routerLinkActive="activo"
               class="submenu-link"
+              data-testid="nav-qa-pantalla-2"
               (click)="cerrarMenuSiMobile()">
               Pantalla 2
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/pantalla-3"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-pantalla-3"
+              (click)="cerrarMenuSiMobile()">
+              Pantalla 3
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/sop-loom"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-sop-loom"
+              (click)="cerrarMenuSiMobile()">
+              SOP Loom
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/casos"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-casos"
+              (click)="cerrarMenuSiMobile()">
+              Casos
             </a>
           </div>
         </nav>
@@ -79,6 +119,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             mat-icon-button
             type="button"
             class="boton-menu"
+            data-testid="layout-menu-button"
             (click)="sidenav.toggle()"
             aria-label="Abrir menú principal">
             <mat-icon>menu</mat-icon>
@@ -92,7 +133,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             <span>{{ usuario.correo }}</span>
           </div>
 
-          <button mat-button type="button" class="logout" (click)="cerrarSesion()">
+          <button mat-button type="button" class="logout" data-testid="auth-logout-button" (click)="cerrarSesion()">
             <mat-icon>logout</mat-icon>
             <span>Cerrar sesión</span>
           </button>
@@ -184,13 +225,13 @@ export class LayoutComponent {
   qaAbierto = false;
 
   items = [
-    { ruta: '/inicio', icono: 'home', texto: 'Inicio' },
-    { ruta: '/cargar-excel', icono: 'cloud_upload', texto: 'Cargar Excel' },
-    { ruta: '/analisis', icono: 'analytics', texto: 'Análisis' },
-    { ruta: '/calculo', icono: 'calculate', texto: 'Cálculo' },
-    { ruta: '/diagnosticos', icono: 'fact_check', texto: 'Diagnósticos' },
-    { ruta: '/historial', icono: 'history', texto: 'Historial' },
-    { ruta: '/configuracion', icono: 'settings', texto: 'Configuración' },
+    { id: 'inicio', ruta: '/inicio', icono: 'home', texto: 'Inicio' },
+    { id: 'cargar-excel', ruta: '/cargar-excel', icono: 'cloud_upload', texto: 'Cargar Excel' },
+    { id: 'analisis', ruta: '/analisis', icono: 'analytics', texto: 'Análisis' },
+    { id: 'calculo', ruta: '/calculo', icono: 'calculate', texto: 'Cálculo' },
+    { id: 'diagnosticos', ruta: '/diagnosticos', icono: 'fact_check', texto: 'Diagnósticos' },
+    { id: 'historial', ruta: '/historial', icono: 'history', texto: 'Historial' },
+    { id: 'configuracion', ruta: '/configuracion', icono: 'settings', texto: 'Configuración' },
   ];
 
   constructor(private auth: AuthService, private router: Router, private dialog: MatDialog) {

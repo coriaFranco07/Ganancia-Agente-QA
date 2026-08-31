@@ -30,6 +30,60 @@ const demoPauseMs = Number(process.env.PLAYWRIGHT_DEMO_PAUSE_MS ?? (modoMuyLento
 const demoFinalPauseMs = Number(process.env.PLAYWRIGHT_DEMO_FINAL_PAUSE_MS ?? (modoMuyLento ? 25000 : modoDemo ? 15000 : 0));
 const cargarFormularioQa = modoDemo || process.env.AUDITORIA_QA_CARGAR_FORM === 'true';
 const validarArchivoQa = process.env.AUDITORIA_QA_VALIDAR_ARCHIVO !== 'false';
+const definicionTecnicaDefaultCodigo = 'DEF-AUD-GAN-RETENCION-V1';
+const contratoDefinicionTecnica = 'QA_DEF_TEC_MIN_V1';
+const rutasObligatoriasDefinicion = [
+  'rutas.login',
+  'rutas.pantalla_qa',
+  'rutas.carga_excel',
+];
+const selectoresObligatoriosDefinicion = [
+  'selectores.login.correo_input',
+  'selectores.login.password_input',
+  'selectores.login.submit_button',
+  'selectores.formulario_qa.pagina',
+  'selectores.formulario_qa.nuevo_boton',
+  'selectores.formulario_qa.guardar_boton',
+  'selectores.formulario_qa.guardado_ok',
+  'selectores.formulario_qa.excel_input',
+  'selectores.formulario_qa.campos.idCaso',
+  'selectores.formulario_qa.campos.definicionTecnicaCodigo',
+  'selectores.formulario_qa.campos.datasetCodigo',
+  'selectores.formulario_qa.campos.periodo',
+  'selectores.formulario_qa.campos.clienteNombre',
+  'selectores.formulario_qa.campos.modoSaldoFavor',
+  'selectores.formulario_qa.campos.descripcion',
+  'selectores.formulario_qa.campos.legajo',
+  'selectores.formulario_qa.campos.empleadoNombre',
+  'selectores.formulario_qa.campos.cuil',
+  'selectores.formulario_qa.campos.remuneracionBruta',
+  'selectores.formulario_qa.campos.deducciones',
+  'selectores.formulario_qa.campos.estadoEsperado',
+  'selectores.formulario_qa.campos.campoResultado',
+  'selectores.formulario_qa.campos.valorEsperado',
+  'selectores.formulario_qa.campos.tolerancia',
+  'selectores.carga_excel.pagina',
+  'selectores.carga_excel.excel_input',
+  'selectores.carga_excel.cliente_input',
+  'selectores.carga_excel.legajo_input',
+  'selectores.carga_excel.periodo_fiscal_input',
+  'selectores.carga_excel.mes_liquidacion_select',
+  'selectores.carga_excel.ejecutar_boton',
+];
+const valoresObligatoriosDefinicion = [
+  'selectores.formulario_qa.titulo_texto',
+  'selectores.formulario_qa.guardado_ok_texto',
+  'selectores.carga_excel.titulo_texto',
+  'selectores.carga_excel.resultado_texto',
+];
+const pasosObligatoriosDefinicion = [
+  'navegar',
+  'completar_formulario_qa',
+  'subir_archivo',
+  'guardar_caso',
+  'ejecutar_analisis',
+  'validar_snapshot',
+];
 
 const capturas = [];
 const capturasFallidas = [];
@@ -113,6 +167,7 @@ try {
 async function ejecutarCaso(caso) {
   const casoSeguro = nombreSeguro(caso.id);
   try {
+    caso.definicion_tecnica = await resolverDefinicionTecnicaCaso(caso);
     const dataset = await resolverDatasetCaso(caso);
     const excelPath = resolverExcel(caso);
     if (cargarFormularioQa) {
@@ -135,6 +190,7 @@ async function ejecutarCaso(caso) {
     return {
       estado: 'verde',
       caso: caso.id,
+      definicion_tecnica: resumenDefinicionTecnica(caso.definicion_tecnica),
       dataset,
       snapshot_id: snapshotId,
       archivo: basename(excelPath),
@@ -155,23 +211,26 @@ async function ejecutarCaso(caso) {
     return {
       estado: 'rojo',
       caso: caso.id,
+      definicion_tecnica: resumenDefinicionTecnica(caso.definicion_tecnica),
       detalle: detalleError(error),
     };
   }
 }
 
 async function cargarCasoQaPorUi(caso, excelPath, casoSeguro) {
-  await page.goto(`${frontendUrl}/qa/pantalla-1`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('heading', { name: /QA - Pantalla 1/i }).waitFor({ state: 'visible' });
-  await page.locator('select[name="datasetCodigo"]').waitFor({ state: 'visible' });
-  await page.locator('select[name="datasetCodigo"] option').filter({ hasText: caso.dataset_codigo }).first().waitFor({ state: 'attached' });
+  await page.goto(urlRuta(caso, 'pantalla_qa', '/qa/pantalla-1'), { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: regexTexto(valorTecnico(caso, 'selectores.formulario_qa.titulo_texto', 'QA - Pantalla 1')) }).waitFor({ state: 'visible' });
+  await page.locator(selectorTecnico(caso, 'selectores.formulario_qa.campos.definicionTecnicaCodigo', 'select[name="definicionTecnicaCodigo"]')).waitFor({ state: 'visible' });
+  await page.locator(`${selectorTecnico(caso, 'selectores.formulario_qa.campos.definicionTecnicaCodigo', 'select[name="definicionTecnicaCodigo"]')} option`).filter({ hasText: codigoDefinicionTecnica(caso) }).first().waitFor({ state: 'attached' });
+  await page.locator(selectorTecnico(caso, 'selectores.formulario_qa.campos.datasetCodigo', 'select[name="datasetCodigo"]')).waitFor({ state: 'visible' });
+  await page.locator(`${selectorTecnico(caso, 'selectores.formulario_qa.campos.datasetCodigo', 'select[name="datasetCodigo"]')} option`).filter({ hasText: caso.dataset_codigo }).first().waitFor({ state: 'attached' });
   await pausaDemo();
 
-  await page.getByRole('button', { name: /Nuevo limpio/i }).click();
+  await clickBotonFormularioQa(caso, 'nuevo_boton', 'nuevo_boton_nombre', 'Nuevo limpio');
   await pausaDemo();
 
   await completarFormularioQa(caso);
-  await page.locator('input[type="file"]').setInputFiles(excelPath);
+  await page.locator(selectorTecnico(caso, 'selectores.formulario_qa.excel_input', '.form-panel input[accept=".xlsx,.xls"]')).setInputFiles(excelPath);
   await page.getByText(basename(excelPath)).first().waitFor({ state: 'visible' });
   await tomarCaptura(`${casoSeguro}-qa-form`);
   await pausaDemo();
@@ -180,15 +239,38 @@ async function cargarCasoQaPorUi(caso, excelPath, casoSeguro) {
     page.waitForResponse((r) => r.url().includes('/api/qa/casos') && r.request().method() === 'POST', {
       timeout: 45_000,
     }),
-    page.getByRole('button', { name: /Guardar caso/i }).click(),
+    clickBotonFormularioQa(caso, 'guardar_boton', 'guardar_boton_nombre', 'Guardar caso'),
   ]);
   if (!response.ok()) {
     throw new Error(`Guardado del caso QA falló ${response.status()}: ${await response.text()}`);
   }
 
-  await page.getByText('Caso guardado en MongoDB para Playwright.').waitFor({ state: 'visible' });
+  await esperarMensajeGuardadoCaso(caso);
   await tomarCaptura(`${casoSeguro}-qa-form-guardado`);
   await pausaDemo();
+}
+
+async function clickBotonFormularioQa(caso, selectorNombre, textoNombre, textoFallback) {
+  const selector = texto(valorTecnico(caso, `selectores.formulario_qa.${selectorNombre}`, ''));
+  if (selector) {
+    await page.locator(selector).click();
+    return;
+  }
+
+  await page.getByRole('button', {
+    name: regexTexto(valorTecnico(caso, `selectores.formulario_qa.${textoNombre}`, textoFallback)),
+  }).click();
+}
+
+async function esperarMensajeGuardadoCaso(caso) {
+  const mensaje = valorTecnico(caso, 'selectores.formulario_qa.guardado_ok_texto', 'Caso guardado en MongoDB para Playwright.');
+  const selector = texto(valorTecnico(caso, 'selectores.formulario_qa.guardado_ok', ''));
+  if (selector) {
+    await page.locator(selector).filter({ hasText: mensaje }).waitFor({ state: 'visible' });
+    return;
+  }
+
+  await page.getByText(mensaje).waitFor({ state: 'visible' });
 }
 
 async function completarFormularioQa(caso) {
@@ -203,21 +285,22 @@ async function completarFormularioQa(caso) {
   const valorEsperado = resultado.valor ?? resultado.retencion_ganancias ?? assertionPrincipal.esperado ?? '';
   const tolerancia = resultado.tolerancia ?? assertionPrincipal.tolerancia ?? 0.05;
 
-  await llenarInput('idCaso', caso.id);
-  await elegirSelect('datasetCodigo', caso.dataset_codigo);
-  await verificarInputValue('periodo', caso.periodo);
-  await llenarInput('clienteNombre', datosCliente.cliente_nombre);
-  await elegirSelect('modoSaldoFavor', datosCliente.modo_saldo_favor);
-  await llenarInput('descripcion', caso.descripcion);
-  await llenarInput('legajo', empleado.legajo);
-  await llenarInput('empleadoNombre', empleado.nombre);
-  await llenarInput('cuil', empleado.cuil);
-  await llenarInput('remuneracionBruta', liquidacion.remuneracion_bruta);
-  await llenarInput('deducciones', liquidacion.deducciones);
-  await elegirSelect('estadoEsperado', resultado.estado ?? 'validado', etiquetaEstado(resultado.estado));
-  await elegirSelect('campoResultado', campoResultado, etiquetaCampoResultado(campoResultado));
-  await llenarInput('valorEsperado', valorEsperado);
-  await llenarInput('tolerancia', tolerancia);
+  await llenarInput(caso, 'idCaso', caso.id);
+  await elegirSelect(caso, 'definicionTecnicaCodigo', codigoDefinicionTecnica(caso));
+  await elegirSelect(caso, 'datasetCodigo', caso.dataset_codigo);
+  await verificarInputValue(caso, 'periodo', caso.periodo);
+  await llenarInput(caso, 'clienteNombre', datosCliente.cliente_nombre);
+  await elegirSelect(caso, 'modoSaldoFavor', datosCliente.modo_saldo_favor);
+  await llenarInput(caso, 'descripcion', caso.descripcion);
+  await llenarInput(caso, 'legajo', empleado.legajo);
+  await llenarInput(caso, 'empleadoNombre', empleado.nombre);
+  await llenarInput(caso, 'cuil', empleado.cuil);
+  await llenarInput(caso, 'remuneracionBruta', liquidacion.remuneracion_bruta);
+  await llenarInput(caso, 'deducciones', liquidacion.deducciones);
+  await elegirSelect(caso, 'estadoEsperado', resultado.estado ?? 'validado', etiquetaEstado(resultado.estado));
+  await elegirSelect(caso, 'campoResultado', campoResultado, etiquetaCampoResultado(campoResultado));
+  await llenarInput(caso, 'valorEsperado', valorEsperado);
+  await llenarInput(caso, 'tolerancia', tolerancia);
 }
 
 async function verificarServicios() {
@@ -290,14 +373,15 @@ async function cargarCasos() {
 }
 
 async function iniciarSesion() {
-  await page.goto(`${frontendUrl}/login`, { waitUntil: 'domcontentloaded' });
-  await page.locator('input[aria-label="Correo electrónico"]').fill(correo);
-  await page.locator('input[aria-label="Contraseña"]').fill(contrasena);
+  const definicion = definicionTecnicaDefault();
+  await page.goto(`${frontendUrl}${rutaDefinicion(definicion, 'login', '/login')}`, { waitUntil: 'domcontentloaded' });
+  await page.locator(valorDesdeObjeto(definicion, 'selectores.login.correo_input', 'input[aria-label="Correo electrónico"]')).fill(correo);
+  await page.locator(valorDesdeObjeto(definicion, 'selectores.login.password_input', 'input[aria-label="Contraseña"]')).fill(contrasena);
   await tomarCaptura('00-login');
 
   const [response] = await Promise.all([
     page.waitForResponse((r) => r.url().includes('/api/auth/login') && r.request().method() === 'POST'),
-    page.locator('button[type="submit"]').click(),
+    page.locator(valorDesdeObjeto(definicion, 'selectores.login.submit_button', 'button[type="submit"]')).click(),
   ]);
   if (!response.ok()) {
     throw new Error(`Login UI falló ${response.status()}: ${await response.text()}`);
@@ -306,9 +390,9 @@ async function iniciarSesion() {
 }
 
 async function cargarExcelPorUi(caso, excelPath, casoSeguro) {
-  await page.goto(`${frontendUrl}/cargar-excel`, { waitUntil: 'domcontentloaded' });
-  await page.getByText('Iniciar Auditoría').first().waitFor({ state: 'visible' });
-  await page.locator('input[type="file"]').setInputFiles(excelPath);
+  await page.goto(urlRuta(caso, 'carga_excel', '/cargar-excel'), { waitUntil: 'domcontentloaded' });
+  await page.getByText(valorTecnico(caso, 'selectores.carga_excel.titulo_texto', 'Iniciar Auditoría')).first().waitFor({ state: 'visible' });
+  await page.locator(selectorTecnico(caso, 'selectores.carga_excel.excel_input', 'input[type="file"]')).setInputFiles(excelPath);
   await page.getByText(basename(excelPath)).first().waitFor({ state: 'visible' });
   await completarContextoCarga(caso);
   await tomarCaptura(`${casoSeguro}-excel`);
@@ -317,13 +401,13 @@ async function cargarExcelPorUi(caso, excelPath, casoSeguro) {
     page.waitForResponse((r) => r.url().includes('/api/analisis/excel') && r.request().method() === 'POST', {
       timeout: 150_000,
     }),
-    page.locator('button.ejecutar-btn').click(),
+    page.locator(selectorTecnico(caso, 'selectores.carga_excel.ejecutar_boton', 'button.ejecutar-btn')).click(),
   ]);
   if (!response.ok()) {
     throw new Error(`Carga Excel falló ${response.status()}: ${await response.text()}`);
   }
   await page.waitForURL(/\/analisis\/[a-f0-9]{24}(?:$|[?#])/, { timeout: 150_000 });
-  await page.getByText('Resultado del Análisis').first().waitFor({ state: 'visible' });
+  await page.getByText(valorTecnico(caso, 'selectores.carga_excel.resultado_texto', 'Resultado del Análisis')).first().waitFor({ state: 'visible' });
 }
 
 async function completarContextoCarga(caso) {
@@ -338,11 +422,11 @@ async function completarContextoCarga(caso) {
   const periodoFiscal = numero(datosContexto.periodo_fiscal) ?? periodo.anio;
   const mesLiquidacion = numero(datosContexto.mes_liquidacion) ?? periodo.mes;
 
-  if (cliente) await page.locator('input[aria-label="Cliente"]').fill(cliente);
-  if (legajo) await page.locator('input[aria-label="Legajo"]').fill(legajo);
-  if (periodoFiscal) await page.locator('input[aria-label="Período fiscal"]').fill(String(periodoFiscal));
+  if (cliente) await page.locator(selectorTecnico(caso, 'selectores.carga_excel.cliente_input', 'input[aria-label="Cliente"]')).fill(cliente);
+  if (legajo) await page.locator(selectorTecnico(caso, 'selectores.carga_excel.legajo_input', 'input[aria-label="Legajo"]')).fill(legajo);
+  if (periodoFiscal) await page.locator(selectorTecnico(caso, 'selectores.carga_excel.periodo_fiscal_input', 'input[aria-label="Período fiscal"]')).fill(String(periodoFiscal));
   if (mesLiquidacion) {
-    await page.locator('select[aria-label="Mes de liquidación"]').selectOption({ label: nombreMes(mesLiquidacion) });
+    await page.locator(selectorTecnico(caso, 'selectores.carga_excel.mes_liquidacion_select', 'select[aria-label="Mes de liquidación"]')).selectOption({ label: nombreMes(mesLiquidacion) });
   }
 }
 
@@ -569,10 +653,200 @@ function resolverExcel(caso) {
   return encontrado;
 }
 
+async function resolverDefinicionTecnicaCaso(caso) {
+  const codigo = codigoDefinicionTecnica(caso);
+  const doc = await mongoose.connection.collection('qa_definiciones_tecnicas').findOne(
+    { codigo, estado: { $ne: 'deprecado' } },
+    { projection: { _id: 0 } },
+  );
+
+  const definicion = doc && codigo !== definicionTecnicaDefaultCodigo ? doc : definicionTecnicaDefault();
+  const errores = validarDefinicionTecnica(definicion);
+  if (errores.length) {
+    throw new Error(`Definición técnica ${codigo} inválida para ${caso.id}: ${errores.join('; ')}`);
+  }
+  return JSON.parse(JSON.stringify(definicion));
+}
+
+function validarDefinicionTecnica(definicion) {
+  const errores = [];
+  if (!texto(definicion.codigo)) errores.push('codigo obligatorio');
+
+  const version = numero(definicion.version);
+  if (!version || version < 1) errores.push('version mayor a cero obligatoria');
+
+  for (const ruta of rutasObligatoriasDefinicion) {
+    if (!texto(valorDesdeObjeto(definicion, ruta, ''))) errores.push(`${ruta} obligatorio`);
+  }
+
+  for (const selector of selectoresObligatoriosDefinicion) {
+    const valor = texto(valorDesdeObjeto(definicion, selector, ''));
+    if (!valor) {
+      errores.push(`${selector} obligatorio`);
+      continue;
+    }
+    if (!esDataTestId(valor)) errores.push(`${selector} debe usar data-testid estable`);
+  }
+
+  for (const valor of valoresObligatoriosDefinicion) {
+    if (!texto(valorDesdeObjeto(definicion, valor, ''))) errores.push(`${valor} obligatorio`);
+  }
+
+  const pasos = Array.isArray(definicion.pasos)
+    ? definicion.pasos.map((paso) => texto(objeto(paso).accion)).filter(Boolean)
+    : [];
+  for (const accion of pasosObligatoriosDefinicion) {
+    if (!pasos.includes(accion)) errores.push(`pasos.${accion} obligatorio`);
+  }
+  return errores;
+}
+
+function esDataTestId(selector) {
+  return /\[data-testid\s*=/i.test(texto(selector));
+}
+
+function resumenDefinicionTecnica(definicion) {
+  const def = objeto(definicion);
+  if (!Object.keys(def).length) return null;
+  return {
+    codigo: texto(def.codigo) || definicionTecnicaDefaultCodigo,
+    version: numero(def.version) ?? 1,
+    nombre: texto(def.nombre),
+    contrato_version: contratoDefinicionTecnica,
+  };
+}
+
+function codigoDefinicionTecnica(caso) {
+  return texto(caso.definicion_tecnica_codigo) || definicionTecnicaDefaultCodigo;
+}
+
+function definicionTecnicaDefault() {
+  return {
+    codigo: definicionTecnicaDefaultCodigo,
+    version: 1,
+    nombre: 'Auditoría Ganancias - Retención por Excel',
+    rutas: {
+      login: '/login',
+      inicio: '/inicio',
+      pantalla_qa: '/qa/pantalla-1',
+      asistente_qa: '/qa/asistente',
+      carga_excel: '/cargar-excel',
+      analisis: '/analisis',
+    },
+    selectores: {
+      login: {
+        correo_input: '[data-testid="auth-email-input"]',
+        password_input: '[data-testid="auth-password-input"]',
+        submit_button: '[data-testid="auth-submit-button"]',
+      },
+      formulario_qa: {
+        titulo_texto: 'QA - Pantalla 1',
+        pagina: '[data-testid="qa-pantalla1-page"]',
+        nuevo_boton: '[data-testid="qa-case-reset-button"]',
+        nuevo_boton_nombre: 'Nuevo limpio',
+        guardar_boton: '[data-testid="qa-case-save-button"]',
+        guardar_boton_nombre: 'Guardar caso',
+        guardado_ok: '[data-testid="qa-case-message"]',
+        guardado_ok_texto: 'Caso guardado en MongoDB para Playwright.',
+        excel_input: '[data-testid="qa-case-excel-input"]',
+        campos: {
+          idCaso: '[data-testid="qa-case-id-input"]',
+          definicionTecnicaCodigo: '[data-testid="qa-case-definicion-select"]',
+          datasetCodigo: '[data-testid="qa-case-dataset-select"]',
+          periodo: '[data-testid="qa-case-periodo-input"]',
+          clienteNombre: '[data-testid="qa-case-cliente-input"]',
+          modoSaldoFavor: '[data-testid="qa-case-modo-saldo-select"]',
+          descripcion: '[data-testid="qa-case-descripcion-input"]',
+          legajo: '[data-testid="qa-case-legajo-input"]',
+          empleadoNombre: '[data-testid="qa-case-empleado-input"]',
+          cuil: '[data-testid="qa-case-cuil-input"]',
+          remuneracionBruta: '[data-testid="qa-case-remuneracion-input"]',
+          deducciones: '[data-testid="qa-case-deducciones-input"]',
+          estadoEsperado: '[data-testid="qa-case-estado-select"]',
+          campoResultado: '[data-testid="qa-case-campo-select"]',
+          valorEsperado: '[data-testid="qa-case-valor-esperado-input"]',
+          tolerancia: '[data-testid="qa-case-tolerancia-input"]',
+        },
+      },
+      asistente_qa: {
+        pagina: '[data-testid="qa-chat-page"]',
+        casos_lista: '[data-testid="qa-chat-cases-list"]',
+        mensajes: '[data-testid="qa-chat-messages"]',
+        buscar_caso_input: '[data-testid="qa-chat-case-search-input"]',
+        pregunta_input: '[data-testid="qa-chat-input"]',
+        enviar_boton: '[data-testid="qa-chat-send-button"]',
+        aprobar_plan_boton: '[data-testid="qa-chat-plan-approve-button"]',
+        ejecutar_plan_boton: '[data-testid="qa-chat-plan-run-button"]',
+      },
+      carga_excel: {
+        titulo_texto: 'Iniciar Auditoría',
+        pagina: '[data-testid="carga-excel-page"]',
+        excel_input: '[data-testid="carga-excel-file-input"]',
+        cliente_input: '[data-testid="carga-excel-cliente-input"]',
+        legajo_input: '[data-testid="carga-excel-legajo-input"]',
+        periodo_fiscal_input: '[data-testid="carga-excel-periodo-fiscal-input"]',
+        mes_liquidacion_select: '[data-testid="carga-excel-mes-liquidacion-select"]',
+        ejecutar_boton: '[data-testid="carga-excel-run-button"]',
+        resultado_texto: 'Resultado del Análisis',
+      },
+    },
+    pasos: [
+      { orden: 1, accion: 'navegar', ruta: 'pantalla_qa', escribe: false, reversible: true },
+      { orden: 2, accion: 'completar_formulario_qa', escribe: true, reversible: true },
+      { orden: 3, accion: 'subir_archivo', destino: 'formulario_qa.excel_input', escribe: true, reversible: true },
+      { orden: 4, accion: 'guardar_caso', escribe: true, reversible: true },
+      { orden: 5, accion: 'navegar', ruta: 'carga_excel', escribe: false, reversible: true },
+      { orden: 6, accion: 'subir_archivo', destino: 'carga_excel.excel_input', escribe: true, reversible: true },
+      { orden: 7, accion: 'ejecutar_analisis', escribe: true, reversible: true },
+      { orden: 8, accion: 'validar_snapshot', escribe: false, reversible: true },
+    ],
+  };
+}
+
+function urlRuta(caso, nombre, fallback) {
+  return `${frontendUrl}${rutaDefinicion(caso.definicion_tecnica, nombre, fallback)}`;
+}
+
+function rutaDefinicion(definicion, nombre, fallback) {
+  const ruta = texto(valorDesdeObjeto(definicion, `rutas.${nombre}`, fallback)) || fallback;
+  return ruta.startsWith('/') ? ruta : `/${ruta}`;
+}
+
+function selectorCampoFormulario(caso, nombre, fallback) {
+  return selectorTecnico(caso, `selectores.formulario_qa.campos.${nombre}`, fallback);
+}
+
+function selectorTecnico(caso, path, fallback) {
+  return valorTecnico(caso, path, fallback);
+}
+
+function valorTecnico(caso, path, fallback) {
+  return texto(valorDesdeObjeto(caso.definicion_tecnica, path, fallback)) || fallback;
+}
+
+function valorDesdeObjeto(origen, path, fallback) {
+  const valor = String(path).split('.').reduce((actual, parte) => {
+    if (!actual || typeof actual !== 'object') return undefined;
+    return actual[parte];
+  }, objeto(origen));
+  return valor === undefined || valor === null || valor === '' ? fallback : valor;
+}
+
+function regexTexto(valor) {
+  return new RegExp(escapeRegExp(texto(valor)), 'i');
+}
+
+function escapeRegExp(valor) {
+  return String(valor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function normalizarCasoMongo(doc) {
   const { _id, ...resto } = doc;
   void _id;
-  return JSON.parse(JSON.stringify(resto));
+  return {
+    definicion_tecnica_codigo: definicionTecnicaDefaultCodigo,
+    ...JSON.parse(JSON.stringify(resto)),
+  };
 }
 
 function parsearPeriodo(periodo) {
@@ -774,26 +1048,27 @@ async function mostrarResultadoDemo({ estado, caso, detalle, verificaciones }) {
   });
 }
 
-async function llenarInput(name, valor) {
-  const input = page.locator(`input[name="${name}"]`);
+async function llenarInput(caso, name, valor) {
+  const input = page.locator(selectorCampoFormulario(caso, name, `input[name="${name}"]`));
   await input.scrollIntoViewIfNeeded();
   await input.fill(texto(valor));
   await pausaDemo(0.35);
 }
 
-async function verificarInputValue(name, valor) {
+async function verificarInputValue(caso, name, valor) {
   const esperado = texto(valor);
-  const input = page.locator(`input[name="${name}"]`);
+  const selector = selectorCampoFormulario(caso, name, `input[name="${name}"]`);
+  const input = page.locator(selector);
   await input.scrollIntoViewIfNeeded();
   await page.waitForFunction(
     ({ selector, expected }) => document.querySelector(selector)?.value === expected,
-    { selector: `input[name="${name}"]`, expected: esperado },
+    { selector, expected: esperado },
   );
   await pausaDemo(0.2);
 }
 
-async function elegirSelect(name, valor, etiqueta = '') {
-  const select = page.locator(`select[name="${name}"]`);
+async function elegirSelect(caso, name, valor, etiqueta = '') {
+  const select = page.locator(selectorCampoFormulario(caso, name, `select[name="${name}"]`));
   await select.scrollIntoViewIfNeeded();
   const encontrado = await select.evaluate((elemento, args) => {
     const target = String(args.valor ?? '').trim();

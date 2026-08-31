@@ -9,6 +9,9 @@ export class QaCaso {
   @Prop({ index: true })
   dataset_codigo: string;
 
+  @Prop({ index: true })
+  definicion_tecnica_codigo: string;
+
   @Prop({ type: MongooseSchema.Types.Mixed })
   dataset: Record<string, unknown> | null;
 

@@ -36,6 +36,12 @@ export class QaEjecucion {
   @Prop({ type: MongooseSchema.Types.Mixed, default: null })
   resultado?: Record<string, unknown> | null;
 
+  @Prop({ type: MongooseSchema.Types.Mixed, default: null })
+  evidencia?: Record<string, unknown> | null;
+
+  @Prop({ type: [String], default: [] })
+  capturas?: string[];
+
   @Prop({ type: MongooseSchema.Types.Mixed, default: {} })
   comando: Record<string, unknown>;
 
