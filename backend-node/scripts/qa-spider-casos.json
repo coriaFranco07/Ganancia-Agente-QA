@@ -1,0 +1,161 @@
+{
+  "version": "3.0",
+  "descripcion": "Catalogo declarativo del QA Spider. Define secciones navegables, categorias de prueba, conjuntos de payloads y casos. El runner no tiene rutas ni payloads hardcodeados: todo sale de aca o de las fuentes externas (archivo local y MongoDB).",
+
+  "niveles": [
+    {
+      "id": "funcional",
+      "orden": 1,
+      "etiqueta": "Funcional",
+      "descripcion": "Completa formularios con datos validos variados y casos limite (vacio, valores de borde, formatos distintos) y verifica que la UI los acepte sin romperse."
+    },
+    {
+      "id": "seguridad",
+      "orden": 2,
+      "etiqueta": "Seguridad",
+      "descripcion": "Inyecta payloads de manipulacion (XSS, SQL/NoSQL, path traversal, unicode) y verifica que no lleguen sin sanear al backend al enviar el formulario."
+    },
+    {
+      "id": "accesibilidad",
+      "orden": 3,
+      "etiqueta": "Accesibilidad",
+      "descripcion": "Reproduce el flujo grabado sin alterar los datos y audita la pantalla resultante contra pautas WCAG (axe-core): nombres accesibles, roles, contraste, estructura."
+    }
+  ],
+
+  "secciones": [
+    { "id": "inicio", "ruta": "/inicio", "etiqueta": "Inicio", "grupo": "auditoria", "por_defecto": true },
+    { "id": "cargarExcel", "ruta": "/cargar-excel", "etiqueta": "Cargar Excel", "grupo": "auditoria", "por_defecto": true },
+    { "id": "analisis", "ruta": "/analisis", "etiqueta": "Analisis", "grupo": "auditoria", "por_defecto": true },
+    { "id": "calculo", "ruta": "/calculo", "etiqueta": "Calculo", "grupo": "auditoria", "por_defecto": true },
+    { "id": "diagnosticos", "ruta": "/diagnosticos", "etiqueta": "Diagnosticos", "grupo": "auditoria", "por_defecto": true },
+    { "id": "historial", "ruta": "/historial", "etiqueta": "Historial", "grupo": "auditoria", "por_defecto": true },
+    { "id": "configuracion", "ruta": "/configuracion", "etiqueta": "Configuracion", "grupo": "auditoria", "por_defecto": true },
+    { "id": "facturacion", "ruta": "/facturacion", "etiqueta": "Facturacion", "grupo": "gestion", "por_defecto": false },
+    { "id": "nuevoUsuario", "ruta": "/nuevo-usuario", "etiqueta": "Nuevo usuario", "grupo": "gestion", "por_defecto": false },
+    { "id": "pantalla1", "ruta": "/qa/pantalla-1", "etiqueta": "QA Pantalla 1", "grupo": "qa", "por_defecto": true },
+    { "id": "pantalla2", "ruta": "/qa/pantalla-2", "etiqueta": "QA Pantalla 2", "grupo": "qa", "por_defecto": true },
+    { "id": "grabaciones", "ruta": "/qa/grabaciones", "etiqueta": "QA Grabaciones", "grupo": "qa", "por_defecto": false }
+  ],
+
+  "payloads": {
+    "funcional": {
+      "texto": ["dato de prueba", "Pérez Juan", "a", ""],
+      "numero": ["1000", "42", "0", "-1"],
+      "email": ["qa.spider@auditoria.test", "a@b.co"],
+      "fecha": ["2026-06-15", "2026-01-01", "2026-12-31"],
+      "generico": ["dato", ""]
+    },
+    "seguridad": {
+      "texto": [
+        "DROP TABLE usuarios;--",
+        "' OR '1'='1",
+        "<script>alert(1)</script>",
+        "{\"$ne\": null}",
+        "{{constructor.constructor('return 1')()}}",
+        "../../etc/passwd",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "🙂👾🔥"
+      ],
+      "numero": ["100000000000000", "-9999", "0.000000001", "1e309", "NaN"],
+      "email": ["sin-arroba", "a@b", "<script>@test.com"],
+      "fecha": ["9999-99-99", "0000-00-00", "31/02/2026"],
+      "generico": ["100000000000000", "-9999", "DROP TABLE usuarios;--", "<script>alert(1)</script>"]
+    }
+  },
+
+  "umbrales": {
+    "carga_ms": 3000,
+    "carga_ms_alerta": 2000,
+    "a11y_controles_sin_nombre": 3,
+    "a11y_impacto_minimo": "moderate",
+    "max_campos_fuzz": 40
+  },
+
+  "casos": [
+    {
+      "id": "SPIDER-NAV-001",
+      "nombre": "Carga de pagina y evidencia visual",
+      "descripcion": "Verifica que la ruta cargue dentro del presupuesto de tiempo y deja captura full-page como evidencia.",
+      "ambito": "ruta",
+      "niveles": ["funcional"],
+      "aplica_a": "*",
+      "pasos": [
+        { "accion": "verificar_carga", "params": { "presupuesto_ms": 3000 } },
+        { "accion": "capturar", "params": {} }
+      ]
+    },
+    {
+      "id": "SPIDER-SAL-001",
+      "nombre": "Consola y red sin errores",
+      "descripcion": "Falla si la ruta genero errores de consola JavaScript o respuestas HTTP 4xx/5xx durante su carga.",
+      "ambito": "ruta",
+      "niveles": ["funcional"],
+      "aplica_a": "*",
+      "pasos": [
+        { "accion": "verificar_sin_errores", "params": { "origen": "ruta", "incluir_consola": true, "incluir_red": true } }
+      ]
+    },
+    {
+      "id": "SPIDER-UI-001",
+      "nombre": "Layout principal presente",
+      "descripcion": "Comprueba que el layout autenticado se renderizo y la ruta no cayo en una pantalla vacia o en login.",
+      "ambito": "ruta",
+      "niveles": ["funcional"],
+      "aplica_a": "*",
+      "pasos": [
+        { "accion": "verificar_elemento", "params": { "selector": "mat-sidenav-container, .contenido, main", "debe_existir": true } },
+        { "accion": "verificar_url", "params": { "no_contiene": "/login" } }
+      ]
+    },
+    {
+      "id": "SPIDER-FRM-001",
+      "nombre": "Formularios con datos validos y casos limite",
+      "descripcion": "Completa los campos visibles con datos validos variados (vacio, bordes, formatos distintos) y verifica que la UI los acepte sin romperse.",
+      "ambito": "ruta",
+      "niveles": ["funcional"],
+      "aplica_a": "*",
+      "pasos": [
+        { "accion": "fuzz_formularios", "params": { "conjunto": "funcional", "max_campos": 40 } },
+        { "accion": "verificar_sin_errores", "params": { "incluir_consola": true, "incluir_red": false } }
+      ]
+    },
+    {
+      "id": "SPIDER-FRM-002",
+      "nombre": "Formularios con payloads de inyeccion y manipulacion",
+      "descripcion": "Inyecta desbordes numericos, XSS, SQL/NoSQL, path traversal, strings largos y unicode en los campos visibles.",
+      "ambito": "ruta",
+      "niveles": ["seguridad"],
+      "aplica_a": "*",
+      "pasos": [
+        { "accion": "fuzz_formularios", "params": { "conjunto": "seguridad", "max_campos": 40 } },
+        { "accion": "capturar", "params": { "sufijo": "fuzz" } },
+        { "accion": "verificar_sin_errores", "params": { "incluir_consola": true, "incluir_red": false } }
+      ]
+    },
+    {
+      "id": "SPIDER-FRM-003",
+      "nombre": "Envio de formulario con payloads sin sanear",
+      "descripcion": "Envia el formulario ya completado con payloads de seguridad e inspecciona el request saliente: si el payload llega al backend tal cual, sin escapar, lo reporta como hallazgo.",
+      "ambito": "ruta",
+      "niveles": ["seguridad"],
+      "aplica_a": ["/qa/pantalla-1", "/nuevo-usuario", "/facturacion"],
+      "pasos": [
+        { "accion": "enviar_formulario", "params": { "espera_ms": 1500, "verificar_sanitizacion": true } },
+        { "accion": "verificar_sin_errores", "params": { "incluir_consola": true, "incluir_red": true, "solo_estado_minimo": 500 } },
+        { "accion": "capturar", "params": { "sufijo": "post-submit" } }
+      ]
+    },
+    {
+      "id": "SPIDER-A11Y-001",
+      "nombre": "Auditoria WCAG con axe-core",
+      "descripcion": "Corre axe-core sobre la pantalla y reporta violaciones de accesibilidad (nombres accesibles, roles, contraste, estructura) por impacto.",
+      "ambito": "ruta",
+      "niveles": ["accesibilidad"],
+      "aplica_a": "*",
+      "pasos": [
+        { "accion": "auditar_accesibilidad", "params": {} }
+      ]
+    }
+  ]
+}

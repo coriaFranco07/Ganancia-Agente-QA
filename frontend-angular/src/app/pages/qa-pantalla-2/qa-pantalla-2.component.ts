@@ -1,5 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { QaCatalogoService, SpiderNivel, SpiderSeccion } from '../../core/services/qa-catalogo.service';
 
+/**
+ * Contenedor de la pantalla: resuelve el catalogo una sola vez y se lo reparte
+ * a los hijos. La lista de casos necesita los niveles para las badges y las
+ * secciones para el selector de rutas del formulario de edicion.
+ */
 @Component({
   selector: 'app-qa-pantalla-2',
   template: `
@@ -9,16 +15,26 @@ import { Component } from '@angular/core';
           <mat-icon>rule</mat-icon>
           QA - Pantalla 2
         </h1>
-        <p>Espacio reservado para el próximo flujo de pruebas.</p>
+        <p>Genera casos de prueba desde un spec y ejecutalos de a uno.</p>
       </section>
 
-      <mat-card class="panel">
-        <mat-icon>pending_actions</mat-icon>
+      <div class="cargando" *ngIf="cargando">
+        <mat-spinner diameter="22"></mat-spinner>
+        <span>Cargando catálogo...</span>
+      </div>
+
+      <mat-card class="panel error" *ngIf="error">
+        <mat-icon>error_outline</mat-icon>
         <div>
-          <h2>Pantalla 2</h2>
-          <p>Queda creada en el menú para separar los casos QA del módulo de datasets.</p>
+          <h2>No se pudo cargar el catálogo</h2>
+          <p>{{ error }}</p>
         </div>
       </mat-card>
+
+      <ng-container *ngIf="!cargando && !error">
+        <app-qa-spider-casos #listaCasos [niveles]="niveles" [secciones]="secciones"></app-qa-spider-casos>
+        <app-qa-spec-generador (casosGenerados)="listaCasos.cargar()"></app-qa-spec-generador>
+      </ng-container>
     </main>
   `,
   styles: [`
@@ -53,45 +69,63 @@ import { Component } from '@angular/core';
       font-size: 13px;
     }
 
+    .cargando {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #64748b;
+      font-size: 13px;
+    }
+
     .panel {
       display: flex;
       align-items: flex-start;
       gap: 12px;
       max-width: 680px;
       padding: 18px;
-      border: 1px solid #dce7f7;
-      border-radius: 12px;
-      background: #ffffff;
-      box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
     }
 
-    .panel > mat-icon {
-      color: #2563eb;
+    .panel.error {
+      border-left: 3px solid #ef4444;
+    }
+
+    .panel.error mat-icon {
+      color: #ef4444;
     }
 
     .panel h2 {
-      margin: 0;
+      margin: 0 0 4px;
+      font-size: 15px;
       color: #0f172a;
-      font-size: 16px;
-      font-weight: 950;
     }
 
     .panel p {
-      margin: 5px 0 0;
-      color: #64748b;
+      margin: 0;
       font-size: 13px;
-      line-height: 1.45;
+      color: #64748b;
     }
-
-    @media (max-width: 720px) {
-      .qa-page {
-        padding: 16px 12px 24px;
-      }
-
-      .titulo-seccion p {
-        margin-left: 0;
-      }
-    }
-  `]
+  `],
 })
-export class QaPantalla2Component {}
+export class QaPantalla2Component implements OnInit {
+  niveles: SpiderNivel[] = [];
+  secciones: SpiderSeccion[] = [];
+  cargando = false;
+  error: string | null = null;
+
+  constructor(private catalogo: QaCatalogoService) {}
+
+  ngOnInit(): void {
+    this.cargando = true;
+    this.catalogo.getLabCatalogo().subscribe({
+      next: (catalogo) => {
+        this.niveles = catalogo?.niveles ?? [];
+        this.secciones = catalogo?.secciones ?? [];
+        this.cargando = false;
+      },
+      error: (err) => {
+        this.error = err?.error?.message ?? err?.message ?? 'error desconocido';
+        this.cargando = false;
+      },
+    });
+  }
+}
