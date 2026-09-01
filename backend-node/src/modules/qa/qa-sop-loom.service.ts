@@ -16,6 +16,7 @@ import {
   CampoCatalogo,
   PantallaCatalogo,
   accionesMencionadas,
+  aplicarReglasCampos,
   buscarPantallaPorRuta,
   camposMencionados,
   datosDesdeCaso,
@@ -27,6 +28,7 @@ import {
   InspeccionPantalla,
   QaPantallaInspectorService,
 } from './qa-pantalla-inspector.service';
+import { QaReglasValidacionService } from './qa-reglas-validacion.service';
 
 type QaSopLoomLean = QaSopLoomAprendizaje & {
   _id?: unknown;
@@ -118,6 +120,7 @@ export class QaSopLoomService {
     @InjectModel(QaSopLoomAprendizaje.name) private readonly aprendizajes: Model<QaSopLoomAprendizajeDocument>,
     @InjectModel(QaCaso.name) private readonly casos: Model<QaCasoDocument>,
     @Optional() private readonly inspector?: QaPantallaInspectorService,
+    @Optional() private readonly reglasValidacion?: QaReglasValidacionService,
   ) {}
 
   async listar(): Promise<Record<string, unknown>[]> {
@@ -163,6 +166,7 @@ export class QaSopLoomService {
     const criterio = this.texto(entrada['criterioAceptacion'] ?? entrada['criterio_aceptacion']);
     const pasos = this.arrayObjetos(entrada['pasos']);
     const casosSeleccionados = this.arrayTexto(entrada['casosSeleccionados'] ?? entrada['casos_seleccionados']);
+    const ordenManualPasos = this.arrayTexto(entrada['ordenManualPasos'] ?? entrada['orden_manual_pasos']);
     if (!this.inspector) throw new InternalServerErrorException('El inspector de pantallas no está disponible.');
     const inspeccion = await this.inspector.resolver(
       entrada['inspeccionId'] ?? entrada['inspeccion_id'],
@@ -178,6 +182,7 @@ export class QaSopLoomService {
       casosSeleccionados,
       inspeccion,
       consideracionesDecididas: this.arrayObjetos(entrada['consideraciones']),
+      ordenManualPasos,
     });
     const pasosResueltos = pasos.map((paso, indice) => {
       const orden = Number(paso['orden']) || indice + 1;
@@ -233,6 +238,7 @@ export class QaSopLoomService {
       consideraciones: compilacion.consideraciones,
       pendientes,
       casos_seleccionados: casosSeleccionados,
+      orden_manual_pasos: ordenManualPasos,
       inspeccion_navegacion: inspeccion,
       // Guardar de nuevo un aprendizaje dado de baja lo reactiva.
       activo: true,
@@ -631,6 +637,7 @@ export class QaSopLoomService {
     casosSeleccionados: string[];
     inspeccion: InspeccionPantalla | null;
     consideracionesDecididas?: Record<string, unknown>[];
+    ordenManualPasos?: string[];
   }): Promise<Compilacion> {
     const guardas = this.detectarConsideraciones(
       entrada.descripcion,
@@ -659,13 +666,17 @@ export class QaSopLoomService {
     }
     const inspeccion = entrada.inspeccion;
     const resolucion = this.pantallaDesdeNavegacion(entrada.ruta, inspeccion);
-    const pantalla = resolucion.pantalla;
-    if (!pantalla) {
+    const pantallaBase = resolucion.pantalla;
+    if (!pantallaBase) {
       return {
         ...vacia,
         pendientes: resolucion.pendientes,
       };
     }
+    // Las reglas de validación (obligatorio/formato) que una persona haya
+    // ajustado pisan el default del catálogo, por pantalla o global (§ reglas).
+    const reglas = this.reglasValidacion ? await this.reglasValidacion.listarResueltas() : [];
+    const pantalla = aplicarReglasCampos(pantallaBase, reglas);
 
     const pendientes: string[] = [...resolucion.pendientes, ...guardas.pendientes];
     const pasosEjecutables: PasoEjecutable[] = [];
@@ -815,7 +826,11 @@ export class QaSopLoomService {
       });
     }
 
-    pasosEjecutables.forEach((paso, indice) => {
+    // Reordena solo los pasos `completar` según lo que una persona haya
+    // arrastrado en el Plan ejecutable (ej: CUIL antes que DNI). Los demás
+    // pasos (navegar, click, verificar) conservan su posición.
+    const pasosOrdenados = this.aplicarOrdenManual(pasosEjecutables, entrada.ordenManualPasos ?? []);
+    pasosOrdenados.forEach((paso, indice) => {
       paso.orden = indice + 1;
     });
 
@@ -842,12 +857,44 @@ export class QaSopLoomService {
       pantalla,
       campos,
       acciones: Array.from(accionesUsadas),
-      pasos_ejecutables: pasosEjecutables,
+      pasos_ejecutables: pasosOrdenados,
       casos,
       consideraciones: guardas.consideraciones,
       pendientes,
       inspeccion,
     };
+  }
+
+  /**
+   * Reordena los pasos `completar` según `ordenManual` (claves
+   * `completar:<campo>`), conservando la posición exacta de los demás pasos
+   * (navegar, click, verificar). Los `completar` no mencionados en el orden
+   * manual se agregan al final del grupo, en su orden original, para no
+   * perder campos nuevos que el SOP haya sumado después.
+   */
+  private aplicarOrdenManual(pasos: PasoEjecutable[], ordenManual: string[]): PasoEjecutable[] {
+    if (ordenManual.length === 0) return pasos;
+
+    const claveDe = (paso: PasoEjecutable): string | null =>
+      paso.tipo === 'completar' && paso.campo ? `completar:${paso.campo}` : null;
+
+    const porClave = new Map<string, PasoEjecutable>();
+    for (const paso of pasos) {
+      const clave = claveDe(paso);
+      if (clave) porClave.set(clave, paso);
+    }
+
+    const enOrdenManual = ordenManual
+      .map((clave) => porClave.get(clave))
+      .filter((paso): paso is PasoEjecutable => Boolean(paso));
+    const restantes = pasos.filter((paso) => {
+      const clave = claveDe(paso);
+      return clave !== null && !ordenManual.includes(clave);
+    });
+    const cola = [...enOrdenManual, ...restantes];
+
+    let cursor = 0;
+    return pasos.map((paso) => (claveDe(paso) === null ? paso : cola[cursor++] ?? paso));
   }
 
   /**

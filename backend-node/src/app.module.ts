@@ -44,6 +44,8 @@ import { QaHallazgosService } from './modules/qa/qa-hallazgos.service';
 import { QaSopLoomController } from './modules/qa/qa-sop-loom.controller';
 import { QaSopLoomService } from './modules/qa/qa-sop-loom.service';
 import { QaPantallaInspectorService } from './modules/qa/qa-pantalla-inspector.service';
+import { QaReglasValidacionController } from './modules/qa/qa-reglas-validacion.controller';
+import { QaReglasValidacionService } from './modules/qa/qa-reglas-validacion.service';
 import { QaCaso, QaCasoSchema } from './modules/qa/schemas/qa-caso.schema';
 import { QaDefinicionTecnica, QaDefinicionTecnicaSchema } from './modules/qa/schemas/qa-definicion-tecnica.schema';
 import { QaEjecucion, QaEjecucionSchema } from './modules/qa/schemas/qa-ejecucion.schema';
@@ -58,6 +60,7 @@ import { QaSpiderCasosService } from './modules/qa/casos/qa-spider-casos.service
 import { QaSpiderCaso, QaSpiderCasoSchema } from './modules/qa/casos/qa-spider-caso.schema';
 import { QaSpecGeneradorController } from './modules/qa/generador/qa-spec-generador.controller';
 import { QaSpecGeneradorService } from './modules/qa/generador/qa-spec-generador.service';
+import { QaReglaValidacion, QaReglaValidacionSchema } from './modules/qa/schemas/qa-regla-validacion.schema';
 
 @Module({
   imports: [
@@ -75,9 +78,10 @@ import { QaSpecGeneradorService } from './modules/qa/generador/qa-spec-generador
       {name:QaSopLoomAprendizaje.name,schema:QaSopLoomAprendizajeSchema},
       {name:QaInspeccionPantalla.name,schema:QaInspeccionPantallaSchema},
       {name:QaSpiderCaso.name,schema:QaSpiderCasoSchema},
+      {name:QaReglaValidacion.name,schema:QaReglaValidacionSchema},
     ]),
   ],
-  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController, QaCatalogoController, QaSpiderCasosController, QaSpecGeneradorController],
+  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController, QaCatalogoController, QaSpiderCasosController, QaSpecGeneradorController, QaReglasValidacionController],
   providers: [
     AuthService,
     AuthGuard,
@@ -108,6 +112,7 @@ import { QaSpecGeneradorService } from './modules/qa/generador/qa-spec-generador
     QaCatalogoService,
     QaSpiderCasosService,
     QaSpecGeneradorService,
+    QaReglasValidacionService,
   ],
 })
 export class AppModule {}

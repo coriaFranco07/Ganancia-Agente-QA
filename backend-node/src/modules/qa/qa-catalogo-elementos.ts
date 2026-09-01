@@ -17,6 +17,30 @@ export interface EsperaCatalogo {
   timeout_ms?: number;
 }
 
+/**
+ * Restricción de formato sobre el valor de un campo. Qué atributos aplican
+ * depende del `tipo` del campo (`validarValorCampo` decide cuáles mirar):
+ *  - texto: largo_exacto/minimo/maximo (sobre los dígitos del valor, igual
+ *    que ya se hacía a mano para CUIL/Teléfono) y patron.
+ *  - numero: valor_minimo/valor_maximo, sobre el valor numérico en sí.
+ *  - fecha: dias_atras_max/dias_adelante_max, sobre la distancia en días
+ *    entre el valor y la fecha de hoy.
+ *  - select/archivo: sin restricción de formato, solo obligatoriedad.
+ */
+export interface RestriccionCampo {
+  largo_exacto?: number | null;
+  largo_minimo?: number | null;
+  largo_maximo?: number | null;
+  patron?: string;
+  patron_mensaje?: string;
+  valor_minimo?: number | null;
+  valor_maximo?: number | null;
+  /** Cuántos días antes de hoy se permite la fecha. 0 = no permite fechas pasadas. */
+  dias_atras_max?: number | null;
+  /** Cuántos días después de hoy se permite la fecha. 0 = no permite fechas futuras. */
+  dias_adelante_max?: number | null;
+}
+
 export interface CampoCatalogo {
   clave: string;
   etiqueta: string;
@@ -26,6 +50,8 @@ export interface CampoCatalogo {
   alias: string[];
   ejemplo?: string;
   nota?: string;
+  /** Default de fábrica. Una regla de validación lo puede ajustar por pantalla o global. */
+  restriccion?: RestriccionCampo;
 }
 
 export interface AccionCatalogo {
@@ -133,6 +159,7 @@ const PANTALLA_3: PantallaCatalogo = {
       obligatorio: true,
       alias: ['telefono', 'teléfono', 'tel', 'contacto'],
       nota: 'Debe tener al menos 6 digitos.',
+      restriccion: { largo_minimo: 6 },
     },
     {
       clave: 'numero_documento',
@@ -150,6 +177,7 @@ const PANTALLA_3: PantallaCatalogo = {
       obligatorio: true,
       alias: ['cuil', 'cuit'],
       nota: 'Debe tener exactamente 11 digitos.',
+      restriccion: { largo_exacto: 11 },
     },
     {
       clave: 'fecha_ingreso',
@@ -309,6 +337,7 @@ const PANTALLA_1: PantallaCatalogo = {
       tipo: 'texto',
       obligatorio: false,
       alias: ['cuil', 'cuit'],
+      restriccion: { largo_exacto: 11 },
     },
     {
       clave: 'remuneracion_bruta',
@@ -426,6 +455,14 @@ const PANTALLA_1: PantallaCatalogo = {
       descripcion: 'descripcion',
       id: 'id',
       definicion_tecnica: 'definicion_tecnica_codigo',
+      // El formulario guarda estos campos en contexto_complementario y en
+      // resultado_esperado, no en contexto.empleado/liquidacion.
+      cliente: 'contexto.contexto_complementario.datos_cliente.cliente_nombre',
+      modo_saldo_favor: 'contexto.contexto_complementario.datos_cliente.modo_saldo_favor',
+      campo_a_validar: 'resultado_esperado.campo',
+      valor_esperado: 'resultado_esperado.valor',
+      tolerancia: 'resultado_esperado.tolerancia',
+      excel: 'archivo.nombre',
     },
     // Sus casos sí se pueden correr uno por uno con /qa/casos/:id/ejecutar.
     ejecutable: true,
@@ -624,6 +661,246 @@ export function fuentesCasosDisponibles(): Array<{ ruta: string; codigo: string;
       codigo: pantalla.codigo,
       fuente: pantalla.fuente_casos as FuenteCasosCatalogo,
     }));
+}
+
+/** Pantallas con campos catalogados, para armar el selector de reglas de validación. */
+export function pantallasConCampos(): PantallaCatalogo[] {
+  return CATALOGO.filter((pantalla) => pantalla.instrumentada && pantalla.campos.length > 0);
+}
+
+/**
+ * Tipo de dato de un campo por su clave (ej: "fecha_ingreso" -> "fecha"), para
+ * poder validar que una regla solo pida restricciones que tengan sentido para
+ * ese tipo. Si se pasa `ruta`, busca solo en esa pantalla; si no, en todo el
+ * catálogo (la clave tiene el mismo tipo en todas las pantallas donde vive).
+ */
+export function tipoDeCampo(clave: string, ruta?: string): TipoCampoCatalogo | null {
+  const pantallas = ruta
+    ? [buscarPantallaPorRuta(ruta)].filter((item): item is PantallaCatalogo => Boolean(item))
+    : pantallasConCampos();
+  for (const pantalla of pantallas) {
+    const campo = pantalla.campos.find((item) => item.clave === clave);
+    if (campo) return campo.tipo;
+  }
+  return null;
+}
+
+/**
+ * A qué pantalla pertenece un caso QA, mirando su `origen` igual que
+ * `condicionesOrigenCasos`, pero contra un objeto en memoria en vez de contra
+ * una query de Mongo. Se usa para validar un caso recién armado, antes de
+ * guardarlo.
+ */
+export function pantallaPorOrigenCaso(caso: Record<string, unknown>): PantallaCatalogo | null {
+  const origen = objetoAnidado(caso['origen']);
+  const complementario = objetoAnidado(objetoAnidado(caso['contexto'])['contexto_complementario']);
+  const origenComplementario = objetoAnidado(complementario['origen']);
+  const pantallaTxt = normalizarTexto(origen['pantalla'] ?? origenComplementario['pantalla']);
+  const tipoTxt = normalizarTexto(origen['tipo'] ?? origenComplementario['tipo']);
+
+  for (const pantalla of CATALOGO) {
+    const filtro = pantalla.fuente_casos?.filtro;
+    if (!filtro) continue;
+    if (filtro.origen_pantalla && normalizarTexto(filtro.origen_pantalla) === pantallaTxt) return pantalla;
+    if (filtro.origen_tipos?.some((tipo) => normalizarTexto(tipo) === tipoTxt)) return pantalla;
+  }
+  return null;
+}
+
+function objetoAnidado(valor: unknown): Record<string, unknown> {
+  return valor && typeof valor === 'object' && !Array.isArray(valor)
+    ? valor as Record<string, unknown>
+    : {};
+}
+
+/**
+ * Ajuste manual sobre un campo: obligatoriedad y/o restricción de formato,
+ * por pantalla puntual o para todas. Cada atributo es independiente — dejar
+ * uno en `null`/vacío no lo borra, hereda lo que haya debajo (regla global o
+ * default del catálogo). Es la forma "resuelta" de `QaReglaValidacion`.
+ */
+export interface ReglaValidacionResuelta {
+  campo: string;
+  alcance: 'global' | 'pantalla';
+  ruta?: string;
+  obligatorio: boolean | null;
+  largo_exacto?: number | null;
+  largo_minimo?: number | null;
+  largo_maximo?: number | null;
+  patron?: string;
+  patron_mensaje?: string;
+  valor_minimo?: number | null;
+  valor_maximo?: number | null;
+  dias_atras_max?: number | null;
+  dias_adelante_max?: number | null;
+}
+
+/**
+ * Devuelve la pantalla con `campos` ajustado según las reglas activas.
+ * Precedencia por atributo (no por regla completa): pantalla puntual > global
+ * > default del catálogo. No muta la pantalla original.
+ */
+export function aplicarReglasCampos(
+  pantalla: PantallaCatalogo,
+  reglas: ReglaValidacionResuelta[],
+): PantallaCatalogo {
+  if (reglas.length === 0) return pantalla;
+
+  const combinar = (base: ReglaValidacionResuelta | undefined, regla: ReglaValidacionResuelta): ReglaValidacionResuelta => ({
+    campo: regla.campo,
+    alcance: regla.alcance,
+    ruta: regla.ruta,
+    obligatorio: regla.obligatorio ?? base?.obligatorio ?? null,
+    largo_exacto: regla.largo_exacto ?? base?.largo_exacto ?? null,
+    largo_minimo: regla.largo_minimo ?? base?.largo_minimo ?? null,
+    largo_maximo: regla.largo_maximo ?? base?.largo_maximo ?? null,
+    patron: regla.patron || base?.patron || '',
+    patron_mensaje: regla.patron_mensaje || base?.patron_mensaje || '',
+    valor_minimo: regla.valor_minimo ?? base?.valor_minimo ?? null,
+    valor_maximo: regla.valor_maximo ?? base?.valor_maximo ?? null,
+    dias_atras_max: regla.dias_atras_max ?? base?.dias_atras_max ?? null,
+    dias_adelante_max: regla.dias_adelante_max ?? base?.dias_adelante_max ?? null,
+  });
+
+  const resuelto = new Map<string, ReglaValidacionResuelta>();
+  for (const regla of reglas) {
+    if (regla.alcance !== 'global') continue;
+    resuelto.set(regla.campo, combinar(resuelto.get(regla.campo), regla));
+  }
+  for (const regla of reglas) {
+    if (regla.alcance !== 'pantalla' || normalizarRuta(regla.ruta) !== normalizarRuta(pantalla.ruta)) continue;
+    resuelto.set(regla.campo, combinar(resuelto.get(regla.campo), regla));
+  }
+  if (resuelto.size === 0) return pantalla;
+
+  return {
+    ...pantalla,
+    campos: pantalla.campos.map((campo) => {
+      const ajuste = resuelto.get(campo.clave);
+      if (!ajuste) return campo;
+      return {
+        ...campo,
+        obligatorio: ajuste.obligatorio ?? campo.obligatorio,
+        restriccion: {
+          largo_exacto: ajuste.largo_exacto ?? campo.restriccion?.largo_exacto ?? null,
+          largo_minimo: ajuste.largo_minimo ?? campo.restriccion?.largo_minimo ?? null,
+          largo_maximo: ajuste.largo_maximo ?? campo.restriccion?.largo_maximo ?? null,
+          patron: ajuste.patron || campo.restriccion?.patron || '',
+          patron_mensaje: ajuste.patron_mensaje || campo.restriccion?.patron_mensaje || '',
+          valor_minimo: ajuste.valor_minimo ?? campo.restriccion?.valor_minimo ?? null,
+          valor_maximo: ajuste.valor_maximo ?? campo.restriccion?.valor_maximo ?? null,
+          dias_atras_max: ajuste.dias_atras_max ?? campo.restriccion?.dias_atras_max ?? null,
+          dias_adelante_max: ajuste.dias_adelante_max ?? campo.restriccion?.dias_adelante_max ?? null,
+        },
+      };
+    }),
+  };
+}
+
+/**
+ * Valida un valor contra la obligatoriedad y restricción ya resueltas de un
+ * campo (después de `aplicarReglasCampos`). Un campo vacío y opcional no se
+ * valida en formato: no tiene sentido exigirle forma a algo que no se cargó.
+ */
+export function validarValorCampo(campo: CampoCatalogo, valor: string): string[] {
+  const texto = (valor ?? '').trim();
+
+  if (campo.obligatorio && !texto) {
+    return [`Falta ${campo.etiqueta}.`];
+  }
+  if (!texto) return [];
+
+  const restriccion = campo.restriccion;
+  if (!restriccion) return [];
+
+  // Qué restricciones tienen sentido depende del tipo de dato del campo: a
+  // una fecha no se le pide "largo en dígitos", se le pide una ventana de
+  // días respecto de hoy. select/archivo no tienen restricción de formato.
+  if (campo.tipo === 'numero') return validarRestriccionNumero(campo, texto, restriccion);
+  if (campo.tipo === 'fecha') return validarRestriccionFecha(campo, texto, restriccion);
+  if (campo.tipo === 'select' || campo.tipo === 'archivo') return [];
+  return validarRestriccionTexto(campo, texto, restriccion);
+}
+
+function validarRestriccionTexto(campo: CampoCatalogo, texto: string, restriccion: RestriccionCampo): string[] {
+  const errores: string[] = [];
+  const digitos = texto.replace(/\D/g, '');
+  if (restriccion.largo_exacto != null && digitos.length !== restriccion.largo_exacto) {
+    errores.push(`${campo.etiqueta} debe tener exactamente ${restriccion.largo_exacto} dígitos.`);
+  }
+  if (restriccion.largo_minimo != null && digitos.length < restriccion.largo_minimo) {
+    errores.push(`${campo.etiqueta} debe tener al menos ${restriccion.largo_minimo} dígitos.`);
+  }
+  if (restriccion.largo_maximo != null && digitos.length > restriccion.largo_maximo) {
+    errores.push(`${campo.etiqueta} debe tener como máximo ${restriccion.largo_maximo} dígitos.`);
+  }
+  if (restriccion.patron) {
+    let coincide = true;
+    try {
+      coincide = new RegExp(restriccion.patron).test(texto);
+    } catch {
+      coincide = true; // un patrón mal escrito no debe bloquear al usuario.
+    }
+    if (!coincide) errores.push(restriccion.patron_mensaje || `${campo.etiqueta} no cumple el formato esperado.`);
+  }
+  return errores;
+}
+
+function validarRestriccionNumero(campo: CampoCatalogo, texto: string, restriccion: RestriccionCampo): string[] {
+  const numero = Number(texto.replace(',', '.'));
+  // Un valor que no llegó a ser un número válido no es un problema de rango:
+  // que lo reporte quien valida el tipo de dato, no esta regla.
+  if (!Number.isFinite(numero)) return [];
+
+  const errores: string[] = [];
+  if (restriccion.valor_minimo != null && numero < restriccion.valor_minimo) {
+    errores.push(`${campo.etiqueta} debe ser mayor o igual a ${restriccion.valor_minimo}.`);
+  }
+  if (restriccion.valor_maximo != null && numero > restriccion.valor_maximo) {
+    errores.push(`${campo.etiqueta} debe ser menor o igual a ${restriccion.valor_maximo}.`);
+  }
+  return errores;
+}
+
+/** Distancia en días calendario entre `texto` (fecha YYYY-MM-DD) y hoy: negativo = pasado, positivo = futuro. */
+function diasDesdeHoy(texto: string): number | null {
+  const fecha = new Date(`${texto}T00:00:00Z`);
+  if (Number.isNaN(fecha.getTime())) return null;
+  const hoy = new Date();
+  const hoyUtc = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
+  return Math.round((fecha.getTime() - hoyUtc) / 86400000);
+}
+
+function validarRestriccionFecha(campo: CampoCatalogo, texto: string, restriccion: RestriccionCampo): string[] {
+  const dias = diasDesdeHoy(texto);
+  // Una fecha que no se pudo parsear no es un problema de ventana permitida.
+  if (dias === null) return [];
+
+  const errores: string[] = [];
+  if (dias < 0 && restriccion.dias_atras_max != null && Math.abs(dias) > restriccion.dias_atras_max) {
+    errores.push(
+      restriccion.dias_atras_max === 0
+        ? `${campo.etiqueta} no puede ser anterior a hoy.`
+        : `${campo.etiqueta} no puede ser más de ${restriccion.dias_atras_max} día(s) anterior a hoy.`,
+    );
+  }
+  if (dias > 0 && restriccion.dias_adelante_max != null && dias > restriccion.dias_adelante_max) {
+    errores.push(
+      restriccion.dias_adelante_max === 0
+        ? `${campo.etiqueta} no puede ser posterior a hoy.`
+        : `${campo.etiqueta} no puede ser más de ${restriccion.dias_adelante_max} día(s) posterior a hoy.`,
+    );
+  }
+  return errores;
+}
+
+/** Valida todos los campos de una pantalla contra los datos resueltos de un caso. */
+export function validarDatosCampos(pantalla: PantallaCatalogo, datos: Record<string, string>): string[] {
+  const errores: string[] = [];
+  for (const campo of pantalla.campos) {
+    errores.push(...validarValorCampo(campo, datos[campo.clave] ?? ''));
+  }
+  return errores;
 }
 
 /**

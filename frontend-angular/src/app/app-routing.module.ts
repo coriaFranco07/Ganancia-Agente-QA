@@ -15,6 +15,7 @@ import { QaPantalla2Component } from './pages/qa-pantalla-2/qa-pantalla-2.compon
 import { QaPantalla3Component } from './pages/qa-pantalla-3/qa-pantalla-3.component';
 import { QaSopLoomComponent } from './pages/qa-sop-loom/qa-sop-loom.component';
 import { QaCasosComponent } from './pages/qa-casos/qa-casos.component';
+import { QaReglasValidacionComponent } from './pages/qa-reglas-validacion/qa-reglas-validacion.component';
 import { AuthGuard } from './core/guards/auth.guard';
 
 const routes: Routes = [
@@ -36,6 +37,7 @@ const routes: Routes = [
   { path: 'qa/pantalla-3', component: QaPantalla3Component, canActivate: [AuthGuard] },
   { path: 'qa/sop-loom', component: QaSopLoomComponent, canActivate: [AuthGuard] },
   { path: 'qa/casos', component: QaCasosComponent, canActivate: [AuthGuard] },
+  { path: 'qa/validaciones', component: QaReglasValidacionComponent, canActivate: [AuthGuard] },
   { path: '', pathMatch: 'full', redirectTo: 'inicio' },
   { path: '**', redirectTo: 'inicio' },
 ];

@@ -103,6 +103,15 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
               (click)="cerrarMenuSiMobile()">
               Casos
             </a>
+            <a
+              mat-button
+              routerLink="/qa/validaciones"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-validaciones"
+              (click)="cerrarMenuSiMobile()">
+              Validaciones
+            </a>
           </div>
         </nav>
 

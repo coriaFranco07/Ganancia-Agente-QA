@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as XLSX from 'xlsx';
@@ -9,11 +9,15 @@ import {
 import { QaDatasetsService } from './qa-datasets.service';
 import { QaCaso, QaCasoDocument } from './schemas/qa-caso.schema';
 import {
+  aplicarReglasCampos,
   buscarPantallaPorRuta,
   condicionesOrigenCasos,
   datosDesdeCaso,
   fuentesCasosDisponibles,
+  pantallaPorOrigenCaso,
+  validarDatosCampos,
 } from './qa-catalogo-elementos';
+import { QaReglasValidacionService } from './qa-reglas-validacion.service';
 
 type OperadorAssertion = 'igual';
 
@@ -108,6 +112,7 @@ export class QaCasosService {
     @InjectModel(QaCaso.name) private readonly casos: Model<QaCasoDocument>,
     private readonly datasets: QaDatasetsService,
     private readonly definicionesTecnicas: QaDefinicionesTecnicasService,
+    @Optional() private readonly reglasValidacion?: QaReglasValidacionService,
   ) {}
 
   async listar(activo = true, pantallaOrigenEntrada?: unknown): Promise<Record<string, unknown>[]> {
@@ -280,7 +285,7 @@ export class QaCasosService {
       ? assertionsEntrada.map((assertion) => this.normalizarAssertion(assertion))
       : [this.normalizarAssertion({ campo, operador: 'igual', esperado: valor, tolerancia })];
 
-    return {
+    const caso: CasoNormalizado = {
       id,
       dataset_codigo: dataset?.codigo ?? datasetCodigo,
       definicion_tecnica_codigo: this.texto(definicionTecnica['codigo']) || QA_DEFINICION_TECNICA_DEFAULT,
@@ -294,6 +299,31 @@ export class QaCasosService {
       origen,
       activo: body['activo'] === false ? false : true,
     };
+
+    await this.validarContraReglas(caso);
+    return caso;
+  }
+
+  /**
+   * Bloquea el guardado (formulario o importación, ambos pasan por acá) si el
+   * caso no cumple las reglas de validación activas para su pantalla de
+   * origen: obligatoriedad y formato (largo, patrón), catálogo + ajustes
+   * manuales combinados con `aplicarReglasCampos`.
+   */
+  private async validarContraReglas(caso: CasoNormalizado): Promise<void> {
+    const pantalla = pantallaPorOrigenCaso(caso as unknown as Record<string, unknown>);
+    if (!pantalla) return;
+
+    const reglas = this.reglasValidacion ? await this.reglasValidacion.listarResueltas() : [];
+    const pantallaConReglas = aplicarReglasCampos(pantalla, reglas);
+    const { datos } = datosDesdeCaso(pantallaConReglas, caso as unknown as Record<string, unknown>);
+    const errores = validarDatosCampos(pantallaConReglas, datos);
+    if (errores.length > 0) {
+      throw new BadRequestException({
+        message: `El caso no cumple las reglas de validación de ${pantalla.nombre}.`,
+        errores,
+      });
+    }
   }
 
   private async payloadDesdeFilaImportada(
@@ -405,18 +435,16 @@ export class QaCasosService {
     const cuil = this.texto(this.valorFila(fila.datos, ['cuil', 'empleado_cuil']));
     const fechaIngreso = this.normalizarFecha(this.valorFila(fila.datos, ['fecha_ingreso', 'ingreso', 'fecha_alta']));
     const fechaFin = this.normalizarFecha(this.valorFila(fila.datos, ['fecha_fin', 'fin', 'fecha_baja']));
-    const cuilNumerico = cuil.replace(/\D/g, '');
-    const telefonoNumerico = telefono.replace(/\D/g, '');
     const errores: string[] = [];
 
     if (!cliente) errores.push('La fila requiere cliente.');
     if (!areaSector) errores.push('La fila requiere area_sector.');
     if (!telefono) errores.push('La fila requiere telefono.');
-    if (telefono && telefonoNumerico.length < 6) errores.push('telefono debe tener al menos 6 números.');
     if (!numeroDocumento) errores.push('La fila requiere numero_documento.');
     if (!cuil) errores.push('La fila requiere cuil.');
-    if (cuil && cuilNumerico.length !== 11) errores.push('cuil debe tener 11 números.');
     if (!fechaIngreso) errores.push('La fila requiere fecha_ingreso.');
+    // El formato (largo de teléfono/CUIL) lo valida `validarContraReglas` al
+    // guardar, usando las reglas activas: catálogo + ajustes por pantalla/global.
     if (fechaFin && fechaIngreso && fechaFin < fechaIngreso) errores.push('fecha_fin no puede ser anterior a fecha_ingreso.');
     if (errores.length > 0) throw new BadRequestException(errores.join(' '));
 

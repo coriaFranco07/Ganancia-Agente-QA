@@ -83,9 +83,14 @@ async function compilar(entrada: {
   seleccionados?: string[];
   descripcion?: string;
   consideracionesDecididas?: Record<string, unknown>[];
+  ordenManualPasos?: string[];
+  reglasValidacion?: Record<string, unknown>[];
 }) {
   const casos = entrada.casos ?? [casoPantalla3('QA-P3-ALTA-27345678-20260415', CASO_COMPLETO)];
-  const service = new QaSopLoomService(null as never, modeloCasos(casos) as never);
+  const reglasStub = entrada.reglasValidacion
+    ? ({ listarResueltas: async () => entrada.reglasValidacion } as never)
+    : undefined;
+  const service = new QaSopLoomService(null as never, modeloCasos(casos) as never, undefined, reglasStub);
 
   return (service as unknown as {
     compilar(input: {
@@ -95,6 +100,7 @@ async function compilar(entrada: {
       casosSeleccionados: string[];
       inspeccion: InspeccionPantalla | null;
       consideracionesDecididas?: Record<string, unknown>[];
+      ordenManualPasos?: string[];
     }): Promise<{
       campos: Record<string, unknown>[];
       acciones: string[];
@@ -110,6 +116,7 @@ async function compilar(entrada: {
     casosSeleccionados: entrada.seleccionados ?? [],
     inspeccion: inspeccionDePrueba(entrada.ruta),
     consideracionesDecididas: entrada.consideracionesDecididas,
+    ordenManualPasos: entrada.ordenManualPasos,
   });
 }
 
@@ -646,6 +653,56 @@ describe('QaSopLoomService.compilar', () => {
     expect(Math.max(...indicesCompletar)).toBeLessThan(indiceGuardar);
   });
 
+  it('reordena los pasos completar segun el orden manual, sin mover navegar/click/verificar', async () => {
+    const sinOrden = await compilar({ ruta: '/qa/pantalla-3', pasos: PASOS_PANTALLA_3 });
+    const camposOriginal = sinOrden.pasos_ejecutables
+      .filter((paso) => paso['tipo'] === 'completar')
+      .map((paso) => paso['campo']);
+    expect(camposOriginal.indexOf('cuil')).toBeGreaterThan(camposOriginal.indexOf('numero_documento'));
+
+    const conOrden = await compilar({
+      ruta: '/qa/pantalla-3',
+      pasos: PASOS_PANTALLA_3,
+      ordenManualPasos: ['completar:cuil', 'completar:numero_documento'],
+    });
+
+    const camposReordenados = conOrden.pasos_ejecutables
+      .filter((paso) => paso['tipo'] === 'completar')
+      .map((paso) => paso['campo']);
+    expect(camposReordenados.indexOf('cuil')).toBeLessThan(camposReordenados.indexOf('numero_documento'));
+
+    // navegar sigue primero y el resto de los tipos no cambia de posicion relativa.
+    const tiposOriginal = sinOrden.pasos_ejecutables.map((paso) => paso['tipo']);
+    const tiposReordenados = conOrden.pasos_ejecutables.map((paso) => paso['tipo']);
+    expect(tiposReordenados).toEqual(tiposOriginal);
+  });
+
+  it('agrega al final del grupo los campos completar que el orden manual no menciona', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-3',
+      pasos: PASOS_PANTALLA_3,
+      ordenManualPasos: ['completar:cuil'],
+    });
+
+    const campos = resultado.pasos_ejecutables
+      .filter((paso) => paso['tipo'] === 'completar')
+      .map((paso) => paso['campo']);
+    expect(campos[0]).toBe('cuil');
+    expect(new Set(campos)).toEqual(new Set(['cliente', 'area_sector', 'telefono', 'numero_documento', 'cuil', 'fecha_ingreso']));
+  });
+
+  it('renumera el campo orden de cada paso despues de reordenar', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-3',
+      pasos: PASOS_PANTALLA_3,
+      ordenManualPasos: ['completar:cuil', 'completar:cliente'],
+    });
+
+    resultado.pasos_ejecutables.forEach((paso, index) => {
+      expect(paso['orden']).toBe(index + 1);
+    });
+  });
+
   it('inserta los campos obligatorios que el SOP no nombro, antes del paso que escribe', async () => {
     const resultado = await compilar({
       ruta: '/qa/pantalla-3',
@@ -662,6 +719,46 @@ describe('QaSopLoomService.compilar', () => {
     expect(indiceCuil).toBeGreaterThan(-1);
     expect(indiceCuil).toBeLessThan(indiceGuardar);
     expect(resultado.pendientes).toEqual([]);
+  });
+
+  it('una regla global agrega al plan un campo que el catálogo trae opcional, si la regla lo marca obligatorio', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-3',
+      pasos: PASOS_PANTALLA_3, // no menciona fecha_fin: es opcional en el catálogo
+      reglasValidacion: [{ campo: 'fecha_fin', alcance: 'global', obligatorio: true }],
+    });
+
+    const campos = resultado.pasos_ejecutables
+      .filter((paso) => paso['tipo'] === 'completar')
+      .map((paso) => paso['campo']);
+    expect(campos).toContain('fecha_fin');
+  });
+
+  it('una regla global saca del plan un campo que el SOP no menciona, si la regla lo marca opcional', async () => {
+    const pasosSinTelefono = PASOS_PANTALLA_3.filter((linea) => !/telefono/i.test(linea));
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-3',
+      pasos: pasosSinTelefono,
+      reglasValidacion: [{ campo: 'telefono', alcance: 'global', obligatorio: false }],
+    });
+
+    const campos = resultado.pasos_ejecutables
+      .filter((paso) => paso['tipo'] === 'completar')
+      .map((paso) => paso['campo']);
+    expect(campos).not.toContain('telefono');
+  });
+
+  it('una regla de otra pantalla no afecta el plan de Pantalla 3', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-3',
+      pasos: PASOS_PANTALLA_3,
+      reglasValidacion: [{ campo: 'fecha_fin', alcance: 'pantalla', ruta: '/qa/pantalla-1', obligatorio: true }],
+    });
+
+    const campos = resultado.pasos_ejecutables
+      .filter((paso) => paso['tipo'] === 'completar')
+      .map((paso) => paso['campo']);
+    expect(campos).not.toContain('fecha_fin');
   });
 
   it('marca los campos con fuente navegacion, nunca inferido', async () => {
