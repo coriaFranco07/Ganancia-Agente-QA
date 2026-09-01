@@ -136,137 +136,113 @@ interface PantallaAprendida {
         </div>
       </section>
 
-      <section class="loom-grid">
-        <form class="panel capture-panel" data-testid="qa-sop-loom-form" (submit)="$event.preventDefault(); aprenderFlujo()">
-          <div class="panel-title">
+      <form class="panel capture-panel" data-testid="qa-sop-loom-form" (submit)="$event.preventDefault(); aprenderFlujo()">
+        <div class="panel-title">
+          <div>
+            <span class="kicker">Entrada</span>
+            <h2>Texto de Loom</h2>
+          </div>
+          <span class="state-chip" [ngClass]="resultado?.estado || 'borrador'">{{ estadoTexto(resultado?.estado || 'borrador') }}</span>
+        </div>
+
+        <label class="loom-text">
+          <span>Descripción o transcripción</span>
+          <textarea
+            [(ngModel)]="form.descripcionVideo"
+            name="descripcionVideo"
+            rows="10"
+            data-testid="qa-sop-loom-text-input"
+            placeholder="Pegá acá todo el texto que entrega Loom. Ejemplo: ingreso a QA, abro Pantalla 3, completo el campo legajo, selecciono dataset y guardo el caso."></textarea>
+        </label>
+
+        <div *ngIf="mensaje" class="message" data-testid="qa-sop-loom-message" [class.error]="mensajeError">{{ mensaje }}</div>
+
+        <div class="actions">
+          <button
+            mat-stroked-button
+            type="button"
+            data-testid="qa-sop-loom-inspect-button"
+            [disabled]="!resultado?.ruta || inspeccionando"
+            (click)="inspeccionarPantalla()">
+            <mat-icon>travel_explore</mat-icon>
+            {{ inspeccionando ? 'Inspeccionando...' : 'Inspeccionar pantalla' }}
+          </button>
+          <button mat-stroked-button type="button" data-testid="qa-sop-loom-save-button" [disabled]="!resultado?.inspeccionNavegacion || guardando" (click)="guardarAprendizaje()">
+            <mat-icon>save</mat-icon>
+            {{ guardando ? 'Guardando...' : 'Guardar flujo' }}
+          </button>
+          <button mat-flat-button color="primary" type="submit" data-testid="qa-sop-loom-learn-button">
+            <mat-icon>school</mat-icon>
+            Analizar texto
+          </button>
+        </div>
+      </form>
+
+      <ng-container *ngIf="resultado as aprendido; else sinResultado">
+        <section class="panel result-head-panel" data-testid="qa-sop-loom-result">
+          <div class="result-head">
             <div>
-              <span class="kicker">Entrada</span>
-              <h2>Texto de Loom</h2>
+              <span class="kicker">Flujo detectado</span>
+              <h2>{{ aprendido.nombre }}</h2>
+              <p>{{ aprendido.ruta || 'Ruta pendiente' }}</p>
             </div>
-            <span class="state-chip" [ngClass]="resultado?.estado || 'borrador'">{{ estadoTexto(resultado?.estado || 'borrador') }}</span>
+            <span class="state-chip" [ngClass]="aprendido.estado">{{ estadoTexto(aprendido.estado) }}</span>
           </div>
+        </section>
 
-          <label class="loom-text">
-            <span>Descripción o transcripción</span>
-            <textarea
-              [(ngModel)]="form.descripcionVideo"
-              name="descripcionVideo"
-              rows="18"
-              data-testid="qa-sop-loom-text-input"
-              placeholder="Pegá acá todo el texto que entrega Loom. Ejemplo: ingreso a QA, abro Pantalla 3, completo el campo legajo, selecciono dataset y guardo el caso."></textarea>
-          </label>
+        <div class="result-accordion" *ngIf="aprendido.pendientes.length > 0">
+          <mat-expansion-panel expanded data-testid="qa-sop-loom-pendientes">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Pendientes</mat-panel-title>
+              <mat-panel-description>{{ aprendido.pendientes.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <ul>
+              <li *ngFor="let pendiente of aprendido.pendientes; trackBy: trackByTexto">{{ pendiente }}</li>
+            </ul>
+          </mat-expansion-panel>
+        </div>
 
-          <div *ngIf="mensaje" class="message" data-testid="qa-sop-loom-message" [class.error]="mensajeError">{{ mensaje }}</div>
-
-          <div class="actions">
-            <button
-              mat-stroked-button
-              type="button"
-              data-testid="qa-sop-loom-inspect-button"
-              [disabled]="!resultado?.ruta || inspeccionando"
-              (click)="inspeccionarPantalla()">
-              <mat-icon>travel_explore</mat-icon>
-              {{ inspeccionando ? 'Inspeccionando...' : 'Inspeccionar pantalla' }}
-            </button>
-            <button mat-stroked-button type="button" data-testid="qa-sop-loom-save-button" [disabled]="!resultado?.inspeccionNavegacion || guardando" (click)="guardarAprendizaje()">
-              <mat-icon>save</mat-icon>
-              {{ guardando ? 'Guardando...' : 'Guardar flujo' }}
-            </button>
-            <button mat-flat-button color="primary" type="submit" data-testid="qa-sop-loom-learn-button">
-              <mat-icon>school</mat-icon>
-              Analizar texto
-            </button>
-          </div>
-        </form>
-
-        <aside class="panel result-panel" data-testid="qa-sop-loom-result">
-          <ng-container *ngIf="resultado as aprendido; else sinResultado">
-            <div class="result-head">
-              <div>
-                <span class="kicker">Flujo detectado</span>
-                <h2>{{ aprendido.nombre }}</h2>
-                <p>{{ aprendido.ruta || 'Ruta pendiente' }}</p>
-              </div>
-              <span class="state-chip" [ngClass]="aprendido.estado">{{ estadoTexto(aprendido.estado) }}</span>
-            </div>
-
-            <div class="summary-grid">
-              <article>
-                <span>Módulo</span>
-                <strong>{{ aprendido.modulo }}</strong>
-              </article>
-              <article>
-                <span>Rol</span>
-                <strong>{{ aprendido.rol }}</strong>
-              </article>
-              <article>
-                <span>Entorno</span>
-                <strong>{{ aprendido.entorno }}</strong>
-              </article>
-            </div>
-
-            <div class="metric-grid">
-              <article>
-                <strong>{{ aprendido.pasos.length }}</strong>
-                <span>Pasos</span>
-              </article>
-              <article>
-                <strong>{{ aprendido.campos.length }}</strong>
-                <span>Campos</span>
-              </article>
-              <article>
-                <strong>{{ aprendido.pendientes.length }}</strong>
-                <span>Pendientes</span>
-              </article>
-            </div>
-
-            <mat-accordion multi class="result-accordion" data-testid="qa-sop-loom-accordion">
-              <mat-expansion-panel *ngIf="aprendido.pendientes.length > 0" expanded data-testid="qa-sop-loom-pendientes">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Pendientes</mat-panel-title>
-                  <mat-panel-description>{{ aprendido.pendientes.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <ul>
-                  <li *ngFor="let pendiente of aprendido.pendientes; trackBy: trackByTexto">{{ pendiente }}</li>
-                </ul>
-              </mat-expansion-panel>
-
-              <mat-expansion-panel data-testid="qa-sop-loom-pasos">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Pasos aprendidos</mat-panel-title>
-                  <mat-panel-description>{{ aprendido.pasos.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <div class="steps">
-                  <article *ngFor="let paso of aprendido.pasos; trackBy: trackByPaso" class="step-card" [attr.data-testid]="'qa-sop-loom-step-' + paso.orden">
-                    <b>{{ paso.orden }}</b>
-                    <div>
-                      <strong>{{ paso.accion }}</strong>
-                      <span>{{ paso.ruta }} · {{ aprendido.inspeccionNavegacion ? 'resuelto por navegación' : paso.selectorSugerido }}</span>
-                    </div>
-                  </article>
+        <div class="result-accordion">
+          <mat-expansion-panel data-testid="qa-sop-loom-pasos">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Pasos aprendidos</mat-panel-title>
+              <mat-panel-description>{{ aprendido.pasos.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <div class="steps">
+              <article *ngFor="let paso of aprendido.pasos; trackBy: trackByPaso" class="step-card" [attr.data-testid]="'qa-sop-loom-step-' + paso.orden">
+                <b>{{ paso.orden }}</b>
+                <div>
+                  <strong>{{ paso.accion }}</strong>
+                  <span>{{ paso.ruta }} · {{ aprendido.inspeccionNavegacion ? 'resuelto por navegación' : paso.selectorSugerido }}</span>
                 </div>
-              </mat-expansion-panel>
+              </article>
+            </div>
+          </mat-expansion-panel>
+        </div>
 
-              <mat-expansion-panel *ngIf="aprendido.campos.length > 0" data-testid="qa-sop-loom-campos">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Campos detectados</mat-panel-title>
-                  <mat-panel-description>{{ aprendido.campos.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <div class="field-grid">
-                  <article *ngFor="let campo of aprendido.campos; trackBy: trackByCampo" class="field-card">
-                    <div class="field-card-head">
-                      <strong>{{ campo.etiqueta }}</strong>
-                      <span class="tipo-pill" [class.obligatorio]="campo.obligatorio">
-                        {{ campo.obligatorio ? 'Obligatorio' : 'Opcional' }}
-                      </span>
-                    </div>
-                    <code class="testid-chip" *ngIf="campo.testid">{{ campo.testid }}</code>
-                    <span class="field-card-tipo">{{ campo.tipo }}</span>
-                  </article>
+        <div class="result-accordion" *ngIf="aprendido.campos.length > 0">
+          <mat-expansion-panel data-testid="qa-sop-loom-campos">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Campos detectados</mat-panel-title>
+              <mat-panel-description>{{ aprendido.campos.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <div class="field-grid">
+              <article *ngFor="let campo of aprendido.campos; trackBy: trackByCampo" class="field-card">
+                <div class="field-card-head">
+                  <strong>{{ campo.etiqueta }}</strong>
+                  <span class="tipo-pill" [class.obligatorio]="campo.obligatorio">
+                    {{ campo.obligatorio ? 'Obligatorio' : 'Opcional' }}
+                  </span>
                 </div>
-              </mat-expansion-panel>
+                <code class="testid-chip" *ngIf="campo.testid">{{ campo.testid }}</code>
+                <span class="field-card-tipo">{{ campo.tipo }}</span>
+              </article>
+            </div>
+          </mat-expansion-panel>
+        </div>
 
-              <mat-expansion-panel *ngIf="planEjecutable.length > 0" expanded data-testid="qa-sop-loom-plan">
+        <div class="result-accordion" *ngIf="planEjecutable.length > 0">
+          <mat-expansion-panel expanded data-testid="qa-sop-loom-plan">
                 <mat-expansion-panel-header>
                   <mat-panel-title>Plan ejecutable · {{ pantallaObjetivo }}</mat-panel-title>
                   <mat-panel-description>{{ planEjecutable.length }} paso(s)</mat-panel-description>
@@ -276,23 +252,34 @@ interface PantallaAprendida {
                   Los pasos de completar campos (<mat-icon class="inline-icon">drag_indicator</mat-icon>) se pueden
                   arrastrar para cambiar el orden en que el agente los carga.
                 </p>
-                <p class="block-hint order-hint" *ngIf="ordenSinGuardar" data-testid="qa-sop-loom-orden-sin-guardar">
-                  <mat-icon>info</mat-icon>
-                  Cambiaste el orden: tocá "Guardar flujo" para que el agente lo use.
-                </p>
-                <div class="steps" cdkDropList (cdkDropListDropped)="onDropPlan($event)">
+                <div class="order-hint" *ngIf="ordenSinGuardar" data-testid="qa-sop-loom-orden-sin-guardar">
+                  <span>
+                    <mat-icon>info</mat-icon>
+                    Cambiaste el orden: guardá para que el agente lo use.
+                  </span>
+                  <button mat-flat-button color="primary" type="button" data-testid="qa-sop-loom-save-button-plan" [disabled]="guardando" (click)="guardarAprendizaje()">
+                    <mat-icon>save</mat-icon>
+                    {{ guardando ? 'Guardando...' : 'Guardar flujo' }}
+                  </button>
+                </div>
+                <div class="plan-path" cdkDropList (cdkDropListDropped)="onDropPlan($event)">
                   <article
-                    *ngFor="let paso of planEjecutable; trackBy: trackByPlan"
-                    class="step-card plan-card"
+                    *ngFor="let paso of planEjecutable; trackBy: trackByPlan; let last = last"
+                    class="plan-node"
                     [class.writes]="paso.escribe"
                     [class.draggable]="paso.tipo === 'completar'"
                     cdkDrag
                     [cdkDragDisabled]="paso.tipo !== 'completar'"
                     [attr.data-testid]="'qa-sop-loom-plan-' + paso.orden">
-                    <mat-icon *ngIf="paso.tipo === 'completar'" class="drag-handle" cdkDragHandle title="Arrastrar para reordenar">drag_indicator</mat-icon>
-                    <b>{{ paso.orden }}</b>
-                    <div>
-                      <strong>{{ paso.nombre }}<em *ngIf="paso.escribe"> · escribe</em></strong>
+                    <div class="plan-node-marker">
+                      <span class="plan-node-square">{{ paso.orden }}</span>
+                      <span class="plan-node-line" *ngIf="!last"></span>
+                    </div>
+                    <div class="plan-node-body">
+                      <div class="plan-node-head">
+                        <strong>{{ paso.nombre }}<em *ngIf="paso.escribe"> · escribe</em></strong>
+                        <mat-icon *ngIf="paso.tipo === 'completar'" class="drag-handle" cdkDragHandle title="Arrastrar para reordenar">drag_indicator</mat-icon>
+                      </div>
                       <span>
                         {{ paso.selector || paso.tipo }}
                         <ng-container *ngIf="paso.campo"> ← caso.{{ paso.campo }}</ng-container>
@@ -301,77 +288,81 @@ interface PantallaAprendida {
                   </article>
                 </div>
               </mat-expansion-panel>
+            </div>
 
-              <mat-expansion-panel data-testid="qa-sop-loom-casos">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Casos que va a ejecutar</mat-panel-title>
-                  <mat-panel-description>{{ casosAEjecutar.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <p class="block-hint">
-                  Salen de los casos cargados en Pantalla 3, a mano o por importación de Excel.
-                  El sistema no inventa datos de prueba.
-                </p>
-                <div *ngIf="casosAEjecutar.length === 0" class="empty-row">
-                  <mat-icon>inventory_2</mat-icon>
-                  <span>Sin casos. Cargá al menos uno en Pantalla 3 y volvé a guardar el flujo.</span>
-                </div>
-                <div class="field-grid" *ngIf="casosAEjecutar.length > 0">
-                  <article
-                    *ngFor="let caso of casosAEjecutar; trackBy: trackByCaso"
-                    class="field-card"
-                    [attr.data-testid]="'qa-sop-loom-caso-' + caso.id">
-                    <strong>{{ caso.id }}</strong>
-                    <span>{{ caso.resumen }}</span>
-                  </article>
-                </div>
-              </mat-expansion-panel>
+        <div class="result-accordion">
+          <mat-expansion-panel data-testid="qa-sop-loom-casos">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Casos que va a ejecutar</mat-panel-title>
+              <mat-panel-description>{{ casosAEjecutar.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <p class="block-hint">
+              Salen de los casos cargados en Pantalla 3, a mano o por importación de Excel.
+              El sistema no inventa datos de prueba.
+            </p>
+            <div *ngIf="casosAEjecutar.length === 0" class="empty-row">
+              <mat-icon>inventory_2</mat-icon>
+              <span>Sin casos. Cargá al menos uno en Pantalla 3 y volvé a guardar el flujo.</span>
+            </div>
+            <div class="field-grid" *ngIf="casosAEjecutar.length > 0">
+              <article
+                *ngFor="let caso of casosAEjecutar; trackBy: trackByCaso"
+                class="field-card"
+                [attr.data-testid]="'qa-sop-loom-caso-' + caso.id">
+                <strong>{{ caso.id }}</strong>
+                <span>{{ caso.resumen }}</span>
+              </article>
+            </div>
+          </mat-expansion-panel>
+        </div>
 
-              <mat-expansion-panel *ngIf="guardas.length > 0" expanded data-testid="qa-sop-loom-guardas">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Guardas del SOP</mat-panel-title>
-                  <mat-panel-description>{{ guardas.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <p class="block-hint">
-                  El agente no decide si una precaución escrita en lenguaje humano es una regla
-                  evaluable o un juicio del operador. Resolvé cada una para poder firmar.
-                </p>
-                <div class="guard-list">
-                  <article
-                    *ngFor="let guarda of guardas; trackBy: trackByGuarda"
-                    class="guard-card"
-                    [class.pending]="guarda.control === 'sin_definir'"
-                    [class.human]="guarda.control === 'humano'"
-                    [attr.data-testid]="'qa-sop-loom-guarda-' + guarda.id">
-                    <strong>{{ guarda.texto }}</strong>
-                    <div class="guard-actions">
-                      <button
-                        mat-stroked-button
-                        type="button"
-                        [class.chosen]="guarda.testeable === true"
-                        [attr.data-testid]="'qa-sop-loom-guarda-testeable-' + guarda.id"
-                        (click)="decidirGuarda(guarda, true)">
-                        El test la verifica
-                      </button>
-                      <button
-                        mat-stroked-button
-                        type="button"
-                        [class.chosen]="guarda.testeable === false"
-                        [attr.data-testid]="'qa-sop-loom-guarda-humana-' + guarda.id"
-                        (click)="decidirGuarda(guarda, false)">
-                        Control humano
-                      </button>
-                    </div>
-                  </article>
+        <div class="result-accordion" *ngIf="guardas.length > 0">
+          <mat-expansion-panel expanded data-testid="qa-sop-loom-guardas">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Guardas del SOP</mat-panel-title>
+              <mat-panel-description>{{ guardas.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <p class="block-hint">
+              El agente no decide si una precaución escrita en lenguaje humano es una regla
+              evaluable o un juicio del operador. Resolvé cada una para poder firmar.
+            </p>
+            <div class="guard-list">
+              <article
+                *ngFor="let guarda of guardas; trackBy: trackByGuarda"
+                class="guard-card"
+                [class.pending]="guarda.control === 'sin_definir'"
+                [class.human]="guarda.control === 'humano'"
+                [attr.data-testid]="'qa-sop-loom-guarda-' + guarda.id">
+                <strong>{{ guarda.texto }}</strong>
+                <div class="guard-actions">
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [class.chosen]="guarda.testeable === true"
+                    [attr.data-testid]="'qa-sop-loom-guarda-testeable-' + guarda.id"
+                    (click)="decidirGuarda(guarda, true)">
+                    El test la verifica
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [class.chosen]="guarda.testeable === false"
+                    [attr.data-testid]="'qa-sop-loom-guarda-humana-' + guarda.id"
+                    (click)="decidirGuarda(guarda, false)">
+                    Control humano
+                  </button>
                 </div>
-                <p class="block-hint" *ngIf="requiereControlHumano" data-testid="qa-sop-loom-control-humano">
-                  Este flujo queda marcado como <strong>no apto para automatización desatendida</strong>:
-                  hay al menos una guarda que depende del criterio de una persona.
-                </p>
-              </mat-expansion-panel>
-            </mat-accordion>
+              </article>
+            </div>
+            <p class="block-hint" *ngIf="requiereControlHumano" data-testid="qa-sop-loom-control-humano">
+              Este flujo queda marcado como <strong>no apto para automatización desatendida</strong>:
+              hay al menos una guarda que depende del criterio de una persona.
+            </p>
+          </mat-expansion-panel>
+        </div>
 
-            <div class="run-actions" *ngIf="aprendido.id">
-              <button
+        <div class="run-actions" *ngIf="aprendido.id">
+          <button
                 mat-stroked-button
                 type="button"
                 data-testid="qa-sop-loom-sign-tecnica-button"
@@ -399,38 +390,36 @@ interface PantallaAprendida {
                 <mat-icon>play_arrow</mat-icon>
                 {{ ejecutando ? 'Ejecutando...' : 'Ejecutar agente' }}
               </button>
-            </div>
+        </div>
 
-            <section class="approval-summary" *ngIf="firmas.tecnica || firmas.negocio" data-testid="qa-sop-loom-approval-summary">
-              <mat-icon>verified_user</mat-icon>
-              <div>
-                <strong>
-                  {{ aprendido.estado === 'aprobado' ? 'Aprobado con las dos firmas' : 'Falta una firma para aprobar' }}
-                </strong>
-                <span *ngIf="firmas.tecnica as tecnica">
-                  Técnica: {{ tecnica.por }} · {{ tecnica.en | date:'dd/MM/yy HH:mm' }}
-                </span>
-                <span *ngIf="firmas.negocio as negocio">
-                  Negocio: {{ negocio.por }} · {{ negocio.en | date:'dd/MM/yy HH:mm' }}
-                </span>
-              </div>
-            </section>
+        <section class="panel approval-summary" *ngIf="firmas.tecnica || firmas.negocio" data-testid="qa-sop-loom-approval-summary">
+          <mat-icon>verified_user</mat-icon>
+          <div>
+            <strong>
+              {{ aprendido.estado === 'aprobado' ? 'Aprobado con las dos firmas' : 'Falta una firma para aprobar' }}
+            </strong>
+            <span *ngIf="firmas.tecnica as tecnica">
+              Técnica: {{ tecnica.por }} · {{ tecnica.en | date:'dd/MM/yy HH:mm' }}
+            </span>
+            <span *ngIf="firmas.negocio as negocio">
+              Negocio: {{ negocio.por }} · {{ negocio.en | date:'dd/MM/yy HH:mm' }}
+            </span>
+          </div>
+        </section>
 
-            <section class="result-block" *ngIf="ultimaEjecucionTexto">
-              <h3>Última ejecución</h3>
-              <p class="block-hint" data-testid="qa-sop-loom-last-run">{{ ultimaEjecucionTexto }}</p>
-            </section>
-          </ng-container>
+        <section class="panel result-block" *ngIf="ultimaEjecucionTexto">
+          <h3>Última ejecución</h3>
+          <p class="block-hint" data-testid="qa-sop-loom-last-run">{{ ultimaEjecucionTexto }}</p>
+        </section>
+      </ng-container>
 
-          <ng-template #sinResultado>
-            <div class="empty-state">
-              <mat-icon>smart_toy</mat-icon>
-              <strong>Sin flujo aprendido</strong>
-              <span>Pegá el texto de Loom y tocá Analizar texto.</span>
-            </div>
-          </ng-template>
-        </aside>
-      </section>
+      <ng-template #sinResultado>
+        <div class="empty-state">
+          <mat-icon>smart_toy</mat-icon>
+          <strong>Sin flujo aprendido</strong>
+          <span>Pegá el texto de Loom y tocá Analizar texto.</span>
+        </div>
+      </ng-template>
 
       <section class="panel learned-panel" data-testid="qa-sop-loom-learned-panel">
         <div class="panel-title">
@@ -561,13 +550,6 @@ interface PantallaAprendida {
       height: 18px;
     }
 
-    .loom-grid {
-      display: grid;
-      grid-template-columns: minmax(0, .95fr) minmax(380px, 1.05fr);
-      gap: 16px;
-      align-items: start;
-    }
-
     .panel {
       border: 1px solid #dbe4f0;
       border-radius: 14px;
@@ -576,7 +558,8 @@ interface PantallaAprendida {
     }
 
     .capture-panel,
-    .result-panel,
+    .result-head-panel,
+    .result-block,
     .learned-panel {
       padding: 18px;
     }
@@ -588,6 +571,10 @@ interface PantallaAprendida {
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 16px;
+    }
+
+    .result-head-panel .result-head {
+      margin-bottom: 0;
     }
 
     .panel-title h2,
@@ -681,54 +668,6 @@ interface PantallaAprendida {
     .state-chip.aprobado { background: #dbeafe; color: #1d4ed8; }
     .count-chip { background: #e0f2fe; color: #075985; }
 
-    .summary-grid,
-    .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-
-    .summary-grid article,
-    .metric-grid article {
-      min-width: 0;
-      border: 1px solid #dbe4f0;
-      border-radius: 12px;
-      background: #f8fbff;
-      padding: 12px;
-    }
-
-    .summary-grid span,
-    .metric-grid span {
-      display: block;
-      color: #64748b;
-      font-size: 11px;
-      font-weight: 850;
-    }
-
-    .summary-grid strong {
-      display: block;
-      margin-top: 5px;
-      overflow: hidden;
-      color: #0f172a;
-      font-size: 12px;
-      font-weight: 950;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .metric-grid strong {
-      display: block;
-      color: #0f172a;
-      font-size: 22px;
-      line-height: 1;
-      font-weight: 950;
-    }
-
-    .metric-grid span {
-      margin-top: 5px;
-    }
-
     .result-block {
       display: grid;
       gap: 8px;
@@ -792,7 +731,9 @@ interface PantallaAprendida {
     .order-hint {
       display: flex;
       align-items: center;
-      gap: 6px;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
       padding: 8px 10px;
       border: 1px solid #bfdbfe;
       border-radius: 8px;
@@ -801,22 +742,38 @@ interface PantallaAprendida {
       font-weight: 900;
     }
 
+    .order-hint > span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .order-hint mat-icon {
       width: 16px;
       height: 16px;
       font-size: 16px;
     }
 
-    .drag-handle {
-      grid-row: 1 / span 1;
-      align-self: center;
-      color: #94a3b8;
-      cursor: grab;
-      touch-action: none;
+    .order-hint button {
+      flex: 0 0 auto;
+      height: 32px;
+      padding: 0 12px;
+      font-size: 11px;
+      font-weight: 950;
     }
 
-    .step-card.draggable {
-      grid-template-columns: 18px 30px minmax(0, 1fr);
+    .order-hint button mat-icon {
+      margin-right: 4px;
+    }
+
+    .drag-handle {
+      flex: 0 0 auto;
+      color: #94a3b8;
+      cursor: grab;
+      font-size: 17px;
+      width: 17px;
+      height: 17px;
+      touch-action: none;
     }
 
     .cdk-drag-preview {
@@ -829,7 +786,7 @@ interface PantallaAprendida {
       opacity: 0.35;
     }
 
-    .cdk-drop-list-dragging .step-card:not(.cdk-drag-placeholder) {
+    .cdk-drop-list-dragging .plan-node:not(.cdk-drag-placeholder) {
       transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
     }
 
@@ -929,30 +886,104 @@ interface PantallaAprendida {
       overflow-wrap: anywhere;
     }
 
-    .plan-card {
-      border-left-color: #0ea5e9;
-      background: #f8fbff;
+    .plan-path {
+      display: grid;
+      max-height: 420px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 2px;
     }
 
-    .plan-card.writes {
-      border-left-color: #d97706;
+    .plan-node {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .plan-node-marker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .plan-node-square {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: #f1f5f9;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 950;
+      box-shadow: 0 0 0 3px #ffffff, 0 0 0 4px #e2e8f0;
+    }
+
+    .plan-node.draggable .plan-node-square {
+      background: #e0f2fe;
+      color: #0369a1;
+      box-shadow: 0 0 0 3px #ffffff, 0 0 0 4px #bae6fd;
+    }
+
+    .plan-node.writes .plan-node-square {
+      background: #fef3c7;
+      color: #b45309;
+      box-shadow: 0 0 0 3px #ffffff, 0 0 0 4px #fde68a;
+    }
+
+    .plan-node-line {
+      width: 2px;
+      flex: 1 1 auto;
+      min-height: 12px;
+      margin: 3px 0;
+      background: #e2e8f0;
+    }
+
+    .plan-node-body {
+      min-width: 0;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border: 1px solid #dbe4f0;
+      border-radius: 10px;
+      background: #ffffff;
+    }
+
+    .plan-node.writes .plan-node-body {
+      border-color: #fde68a;
       background: #fffbeb;
     }
 
-    .plan-card b {
-      background: #e0f2fe;
-      color: #0369a1;
+    .plan-node-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
 
-    .plan-card.writes b {
-      background: #fef3c7;
-      color: #b45309;
+    .plan-node-head strong {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 900;
     }
 
-    .plan-card em {
+    .plan-node-head em {
       font-style: normal;
       color: #b45309;
       font-weight: 950;
+    }
+
+    .plan-node-body > span {
+      display: block;
+      margin-top: 4px;
+      color: #64748b;
+      font-size: 11px;
+      line-height: 1.35;
+      font-weight: 750;
+      overflow-wrap: anywhere;
     }
 
     .block-hint {
@@ -1169,12 +1200,6 @@ interface PantallaAprendida {
       height: 18px;
     }
 
-    @media (max-width: 1180px) {
-      .loom-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
     @media (max-width: 760px) {
       .loom-page {
         padding: 16px 12px 24px;
@@ -1195,8 +1220,6 @@ interface PantallaAprendida {
         flex: 1 1 150px;
       }
 
-      .summary-grid,
-      .metric-grid,
       .field-grid,
       .learned-grid {
         grid-template-columns: 1fr;
