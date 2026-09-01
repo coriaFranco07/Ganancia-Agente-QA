@@ -61,6 +61,14 @@ export class QaSopLoomAprendizaje {
   @Prop({ type: [String], default: [] })
   casos_seleccionados: string[];
 
+  /**
+   * Orden que una persona eligió a mano para los pasos `completar` del plan
+   * ejecutable (ej: cargar CUIL antes que DNI). Claves con forma
+   * `completar:<campo>`. Se reaplica cada vez que se recompila el flujo.
+   */
+  @Prop({ type: [String], default: [] })
+  orden_manual_pasos: string[];
+
   @Prop({ type: MongooseSchema.Types.Mixed, default: null })
   definicion_ejecutable?: Record<string, unknown> | null;
 

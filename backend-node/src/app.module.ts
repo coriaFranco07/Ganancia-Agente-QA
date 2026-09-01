@@ -44,6 +44,8 @@ import { QaHallazgosService } from './modules/qa/qa-hallazgos.service';
 import { QaSopLoomController } from './modules/qa/qa-sop-loom.controller';
 import { QaSopLoomService } from './modules/qa/qa-sop-loom.service';
 import { QaPantallaInspectorService } from './modules/qa/qa-pantalla-inspector.service';
+import { QaReglasValidacionController } from './modules/qa/qa-reglas-validacion.controller';
+import { QaReglasValidacionService } from './modules/qa/qa-reglas-validacion.service';
 import { QaCaso, QaCasoSchema } from './modules/qa/schemas/qa-caso.schema';
 import { QaDefinicionTecnica, QaDefinicionTecnicaSchema } from './modules/qa/schemas/qa-definicion-tecnica.schema';
 import { QaEjecucion, QaEjecucionSchema } from './modules/qa/schemas/qa-ejecucion.schema';
@@ -51,6 +53,7 @@ import { QaHallazgo, QaHallazgoSchema } from './modules/qa/schemas/qa-hallazgo.s
 import { QaPlanAsistente, QaPlanAsistenteSchema } from './modules/qa/schemas/qa-plan-asistente.schema';
 import { QaSopLoomAprendizaje, QaSopLoomAprendizajeSchema } from './modules/qa/schemas/qa-sop-loom-aprendizaje.schema';
 import { QaInspeccionPantalla, QaInspeccionPantallaSchema } from './modules/qa/schemas/qa-inspeccion-pantalla.schema';
+import { QaReglaValidacion, QaReglaValidacionSchema } from './modules/qa/schemas/qa-regla-validacion.schema';
 
 @Module({
   imports: [
@@ -67,9 +70,10 @@ import { QaInspeccionPantalla, QaInspeccionPantallaSchema } from './modules/qa/s
       {name:QaPlanAsistente.name,schema:QaPlanAsistenteSchema},
       {name:QaSopLoomAprendizaje.name,schema:QaSopLoomAprendizajeSchema},
       {name:QaInspeccionPantalla.name,schema:QaInspeccionPantallaSchema},
+      {name:QaReglaValidacion.name,schema:QaReglaValidacionSchema},
     ]),
   ],
-  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController],
+  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController, QaReglasValidacionController],
   providers: [
     AuthService,
     AuthGuard,
@@ -97,6 +101,7 @@ import { QaInspeccionPantalla, QaInspeccionPantallaSchema } from './modules/qa/s
     QaHallazgosService,
     QaSopLoomService,
     QaPantallaInspectorService,
+    QaReglasValidacionService,
   ],
 })
 export class AppModule {}
