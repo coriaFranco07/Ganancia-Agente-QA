@@ -69,21 +69,21 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             </a>
             <a
               mat-button
-              routerLink="/qa/pantalla-2"
-              routerLinkActive="activo"
-              class="submenu-link"
-              data-testid="nav-qa-pantalla-2"
-              (click)="cerrarMenuSiMobile()">
-              Pantalla 2
-            </a>
-            <a
-              mat-button
               routerLink="/qa/pantalla-3"
               routerLinkActive="activo"
               class="submenu-link"
               data-testid="nav-qa-pantalla-3"
               (click)="cerrarMenuSiMobile()">
               Pantalla 3
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/pantalla-4"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-pantalla-4"
+              (click)="cerrarMenuSiMobile()">
+              Suite de QA
             </a>
             <a
               mat-button

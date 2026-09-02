@@ -53,14 +53,13 @@ import { QaHallazgo, QaHallazgoSchema } from './modules/qa/schemas/qa-hallazgo.s
 import { QaPlanAsistente, QaPlanAsistenteSchema } from './modules/qa/schemas/qa-plan-asistente.schema';
 import { QaSopLoomAprendizaje, QaSopLoomAprendizajeSchema } from './modules/qa/schemas/qa-sop-loom-aprendizaje.schema';
 import { QaInspeccionPantalla, QaInspeccionPantallaSchema } from './modules/qa/schemas/qa-inspeccion-pantalla.schema';
-import { QaCatalogoController } from './modules/qa/catalogo/qa-catalogo.controller';
-import { QaCatalogoService } from './modules/qa/catalogo/qa-catalogo.service';
-import { QaSpiderCasosController } from './modules/qa/casos/qa-spider-casos.controller';
-import { QaSpiderCasosService } from './modules/qa/casos/qa-spider-casos.service';
-import { QaSpiderCaso, QaSpiderCasoSchema } from './modules/qa/casos/qa-spider-caso.schema';
-import { QaSpecGeneradorController } from './modules/qa/generador/qa-spec-generador.controller';
-import { QaSpecGeneradorService } from './modules/qa/generador/qa-spec-generador.service';
 import { QaReglaValidacion, QaReglaValidacionSchema } from './modules/qa/schemas/qa-regla-validacion.schema';
+import { QaSuiteEjecucion, QaSuiteEjecucionSchema } from './modules/qa/suite/schemas/qa-suite-ejecucion.schema';
+import { QaSuiteHallazgo, QaSuiteHallazgoSchema } from './modules/qa/suite/schemas/qa-suite-hallazgo.schema';
+import { QaSuiteCorrida, QaSuiteCorridaSchema } from './modules/qa/suite/schemas/qa-suite-corrida.schema';
+import { QaSuiteController } from './modules/qa/suite/qa-suite.controller';
+import { QaSuiteRunnerService } from './modules/qa/suite/qa-suite-runner.service';
+import { QaSuiteDerivadorService } from './modules/qa/suite/qa-suite-derivador.service';
 
 @Module({
   imports: [
@@ -77,11 +76,13 @@ import { QaReglaValidacion, QaReglaValidacionSchema } from './modules/qa/schemas
       {name:QaPlanAsistente.name,schema:QaPlanAsistenteSchema},
       {name:QaSopLoomAprendizaje.name,schema:QaSopLoomAprendizajeSchema},
       {name:QaInspeccionPantalla.name,schema:QaInspeccionPantallaSchema},
-      {name:QaSpiderCaso.name,schema:QaSpiderCasoSchema},
       {name:QaReglaValidacion.name,schema:QaReglaValidacionSchema},
+      {name:QaSuiteEjecucion.name,schema:QaSuiteEjecucionSchema},
+      {name:QaSuiteHallazgo.name,schema:QaSuiteHallazgoSchema},
+      {name:QaSuiteCorrida.name,schema:QaSuiteCorridaSchema},
     ]),
   ],
-  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController, QaCatalogoController, QaSpiderCasosController, QaSpecGeneradorController, QaReglasValidacionController],
+  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController, QaReglasValidacionController, QaSuiteController],
   providers: [
     AuthService,
     AuthGuard,
@@ -109,10 +110,9 @@ import { QaReglaValidacion, QaReglaValidacionSchema } from './modules/qa/schemas
     QaHallazgosService,
     QaSopLoomService,
     QaPantallaInspectorService,
-    QaCatalogoService,
-    QaSpiderCasosService,
-    QaSpecGeneradorService,
     QaReglasValidacionService,
+    QaSuiteRunnerService,
+    QaSuiteDerivadorService,
   ],
 })
 export class AppModule {}

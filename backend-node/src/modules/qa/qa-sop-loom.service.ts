@@ -40,7 +40,7 @@ type QaSopLoomLean = QaSopLoomAprendizaje & {
  * Plantilla de un paso. Los `completar` no llevan valor fijo: el valor sale del
  * caso QA que se este ejecutando en esa vuelta.
  */
-interface PasoEjecutable {
+export interface PasoEjecutable {
   orden: number;
   tipo: 'navegar' | 'completar' | 'click' | 'verificar' | 'verificar_fila';
   nombre: string;

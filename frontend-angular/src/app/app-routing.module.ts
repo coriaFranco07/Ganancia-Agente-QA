@@ -11,8 +11,8 @@ import { DatosComplementariosComponent } from './pages/datos-complementarios/dat
 import { LoginComponent } from './pages/login/login.component';
 import { QaAsistenteComponent } from './pages/qa-asistente/qa-asistente.component';
 import { QaPantalla1Component } from './pages/qa-pantalla-1/qa-pantalla-1.component';
-import { QaPantalla2Component } from './pages/qa-pantalla-2/qa-pantalla-2.component';
 import { QaPantalla3Component } from './pages/qa-pantalla-3/qa-pantalla-3.component';
+import { QaPantalla4Component } from './pages/qa-pantalla-4/qa-pantalla-4.component';
 import { QaSopLoomComponent } from './pages/qa-sop-loom/qa-sop-loom.component';
 import { QaCasosComponent } from './pages/qa-casos/qa-casos.component';
 import { QaReglasValidacionComponent } from './pages/qa-reglas-validacion/qa-reglas-validacion.component';
@@ -33,8 +33,8 @@ const routes: Routes = [
   { path: 'configuracion', component: ConfiguracionComponent, canActivate: [AuthGuard] },
   { path: 'qa/asistente', component: QaAsistenteComponent, canActivate: [AuthGuard] },
   { path: 'qa/pantalla-1', component: QaPantalla1Component, canActivate: [AuthGuard] },
-  { path: 'qa/pantalla-2', component: QaPantalla2Component, canActivate: [AuthGuard] },
   { path: 'qa/pantalla-3', component: QaPantalla3Component, canActivate: [AuthGuard] },
+  { path: 'qa/pantalla-4', component: QaPantalla4Component, canActivate: [AuthGuard] },
   { path: 'qa/sop-loom', component: QaSopLoomComponent, canActivate: [AuthGuard] },
   { path: 'qa/casos', component: QaCasosComponent, canActivate: [AuthGuard] },
   { path: 'qa/validaciones', component: QaReglasValidacionComponent, canActivate: [AuthGuard] },
