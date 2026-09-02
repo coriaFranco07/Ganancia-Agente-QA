@@ -53,7 +53,7 @@ interface ResultadoImportacionQa {
               <mat-icon>person_add</mat-icon>
             </div>
             <div>
-              <span>QA - Pantalla 3</span>
+              <span>Legajo de Cliente</span>
               <h1>Alta básica de cliente</h1>
             </div>
           </div>
@@ -133,8 +133,8 @@ interface ResultadoImportacionQa {
       <section class="link-card" data-testid="qa-screen3-cases-panel">
         <mat-icon>table_view</mat-icon>
         <div>
-          <strong>Los casos de Pantalla 3 se ven, editan y eliminan en el módulo Casos.</strong>
-          <span>Ahí podés buscarlos, revisar los de Pantalla 1 en el mismo lugar y borrar los que ya no sirvan.</span>
+          <strong>Los casos de Legajo de Cliente se ven, editan y eliminan en el módulo Casos.</strong>
+          <span>Ahí podés buscarlos, revisar los de Legajo de Ganancias en el mismo lugar y borrar los que ya no sirvan.</span>
         </div>
         <a mat-flat-button color="primary" routerLink="/qa/casos" data-testid="qa-screen3-cases-link">
           Ir a Casos
@@ -441,7 +441,7 @@ interface ResultadoImportacionQa {
   `],
 })
 export class QaPantalla3Component implements OnInit {
-  private readonly pantallaOrigen = 'QA - Pantalla 3';
+  private readonly pantallaOrigen = 'Legajo de Cliente';
 
   form: Pantalla3Form = this.crearForm();
   editandoId = '';
@@ -502,12 +502,12 @@ export class QaPantalla3Component implements OnInit {
       next: () => {
         this.guardando = false;
         this.mostrarMensaje(
-          this.editandoId ? `Caso ${this.editandoId} actualizado en MongoDB.` : 'Caso de Pantalla 3 guardado en MongoDB.',
+          this.editandoId ? `Caso ${this.editandoId} actualizado en MongoDB.` : 'Caso de Legajo de Cliente guardado en MongoDB.',
         );
       },
       error: (error) => {
         this.guardando = false;
-        this.mostrarMensaje(this.mensajeErrorApi(error, 'No se pudo guardar el caso de Pantalla 3.'), true);
+        this.mostrarMensaje(this.mensajeErrorApi(error, 'No se pudo guardar el caso de Legajo de Cliente.'), true);
       },
     });
   }
@@ -568,7 +568,7 @@ export class QaPantalla3Component implements OnInit {
       definicion_tecnica_codigo: 'DEF-AUD-GAN-RETENCION-V1',
       dataset_codigo: '',
       periodo: '',
-      descripcion: `Alta Pantalla 3 - ${cliente}`,
+      descripcion: `Alta Legajo de Cliente - ${cliente}`,
       archivo: null,
       contexto: {
         empleado: {

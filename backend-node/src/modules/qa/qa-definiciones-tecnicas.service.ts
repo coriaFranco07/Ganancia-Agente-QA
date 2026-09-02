@@ -42,7 +42,7 @@ const SELECTORES_OBLIGATORIOS: ReglaContratoQa[] = [
   { path: 'selectores.login.correo_input', descripcion: 'Input de correo del login.' },
   { path: 'selectores.login.password_input', descripcion: 'Input de contraseña del login.' },
   { path: 'selectores.login.submit_button', descripcion: 'Botón para iniciar sesión.' },
-  { path: 'selectores.formulario_qa.pagina', descripcion: 'Contenedor principal de QA - Pantalla 1.' },
+  { path: 'selectores.formulario_qa.pagina', descripcion: 'Contenedor principal de Legajo de Ganancias.' },
   { path: 'selectores.formulario_qa.nuevo_boton', descripcion: 'Botón para limpiar el formulario QA.' },
   { path: 'selectores.formulario_qa.guardar_boton', descripcion: 'Botón para guardar el caso QA.' },
   { path: 'selectores.formulario_qa.guardado_ok', descripcion: 'Mensaje de guardado exitoso del caso QA.' },
@@ -289,7 +289,7 @@ export class QaDefinicionesTecnicasService {
           submit_button: '[data-testid="auth-submit-button"]',
         },
         formulario_qa: {
-          titulo_texto: 'QA - Pantalla 1',
+          titulo_texto: 'Legajo de Ganancias',
           pagina: '[data-testid="qa-pantalla1-page"]',
           nuevo_boton: '[data-testid="qa-case-reset-button"]',
           nuevo_boton_nombre: 'Nuevo limpio',

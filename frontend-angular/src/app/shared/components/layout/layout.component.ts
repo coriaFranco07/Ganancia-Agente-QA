@@ -65,16 +65,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
               class="submenu-link"
               data-testid="nav-qa-pantalla-1"
               (click)="cerrarMenuSiMobile()">
-              Pantalla 1
-            </a>
-            <a
-              mat-button
-              routerLink="/qa/pantalla-2"
-              routerLinkActive="activo"
-              class="submenu-link"
-              data-testid="nav-qa-pantalla-2"
-              (click)="cerrarMenuSiMobile()">
-              Pantalla 2
+              Legajo de Ganancias
             </a>
             <a
               mat-button
@@ -83,7 +74,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
               class="submenu-link"
               data-testid="nav-qa-pantalla-3"
               (click)="cerrarMenuSiMobile()">
-              Pantalla 3
+              Legajo de Cliente
             </a>
             <a
               mat-button
@@ -111,6 +102,15 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
               data-testid="nav-qa-validaciones"
               (click)="cerrarMenuSiMobile()">
               Validaciones
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/estadisticas"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-estadisticas"
+              (click)="cerrarMenuSiMobile()">
+              Estadísticas
             </a>
           </div>
         </nav>

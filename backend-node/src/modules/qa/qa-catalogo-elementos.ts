@@ -124,7 +124,7 @@ export interface PantallaCatalogo {
 const PANTALLA_3: PantallaCatalogo = {
   codigo: 'QA-PANT-3',
   ruta: '/qa/pantalla-3',
-  nombre: 'QA - Pantalla 3',
+  nombre: 'Legajo de Cliente',
   modulo: 'QA',
   instrumentada: true,
   selectores: {
@@ -236,8 +236,10 @@ const PANTALLA_3: PantallaCatalogo = {
     clase_error: 'error',
   },
   fuente_casos: {
-    etiqueta: 'Casos de QA - Pantalla 3 (alta básica de cliente)',
-    filtro: { origen_pantalla: 'QA - Pantalla 3' },
+    etiqueta: 'Casos de Legajo de Cliente',
+    // 'origen_pantalla' queda por compatibilidad con casos guardados antes de
+    // este nombre; 'formulario_cliente_basico' es el que manda de acá en más.
+    filtro: { origen_pantalla: 'QA - Pantalla 3', origen_tipos: ['formulario_cliente_basico'] },
     rutas_datos: ['contexto.contexto_complementario.pantalla_3', 'contexto.empleado'],
     prefijo_fila: 'qa-screen3-case-',
     // Misma formula que usa la pantalla al guardar, para poder aserir la fila.
@@ -254,7 +256,7 @@ const PANTALLA_3: PantallaCatalogo = {
 const PANTALLA_1: PantallaCatalogo = {
   codigo: 'QA-PANT-1',
   ruta: '/qa/pantalla-1',
-  nombre: 'QA - Pantalla 1',
+  nombre: 'Legajo de Ganancias',
   modulo: 'QA',
   instrumentada: true,
   selectores: {
@@ -443,7 +445,7 @@ const PANTALLA_1: PantallaCatalogo = {
     clase_error: 'error',
   },
   fuente_casos: {
-    etiqueta: 'Casos de QA - Pantalla 1 (retención de ganancias)',
+    etiqueta: 'Casos de Legajo de Ganancias',
     // Pantalla 1 no marca `origen.pantalla`: se reconoce por el tipo de origen.
     filtro: { origen_tipos: ['formulario_qa_pantalla_1', 'importacion_qa_pantalla_1'] },
     rutas_datos: ['contexto.empleado', 'contexto.liquidacion'],
@@ -531,19 +533,7 @@ const SOP_LOOM: PantallaCatalogo = {
   },
 };
 
-const PANTALLA_2: PantallaCatalogo = {
-  codigo: 'QA-PANT-2',
-  ruta: '/qa/pantalla-2',
-  nombre: 'QA - Pantalla 2',
-  modulo: 'QA',
-  instrumentada: false,
-  selectores: {},
-  campos: [],
-  acciones: [],
-  nota: 'La pantalla no expone data-testid todavia. Hay que instrumentarla antes de poder automatizarla.',
-};
-
-const CATALOGO: PantallaCatalogo[] = [PANTALLA_1, PANTALLA_2, PANTALLA_3, SOP_LOOM];
+const CATALOGO: PantallaCatalogo[] = [PANTALLA_1, PANTALLA_3, SOP_LOOM];
 
 export function normalizarTexto(valor: unknown): string {
   return (valor === undefined || valor === null ? '' : String(valor))
@@ -594,6 +584,59 @@ export function accionesMencionadas(pantalla: PantallaCatalogo, texto: string): 
   return pantalla.acciones
     .map((accion) => ({ accion, alias: mencionaAlias(texto, accion.alias) }))
     .filter((item) => item.alias !== '');
+}
+
+/**
+ * Nombres por los que un SOP puede referirse a una pantalla: su ruta, su
+ * nombre, su codigo y la forma corta que se deduce de la ruta
+ * (`/qa/pantalla-3` -> "pantalla 3"). No se hardcodea ninguna pantalla: sumar
+ * una al catalogo alcanza para que el detector la reconozca.
+ */
+function aliasDePantalla(pantalla: PantallaCatalogo): string[] {
+  const ultimoTramo = pantalla.ruta.split('/').filter(Boolean).pop() ?? '';
+  const legible = ultimoTramo.replace(/[-_]+/g, ' ').trim();
+  return Array.from(new Set([
+    pantalla.ruta,
+    pantalla.nombre,
+    pantalla.codigo,
+    legible,
+    legible.replace(/\s+/g, ''),
+  ].filter(Boolean)));
+}
+
+/** Posicion de la primera mencion de `alias` como palabra completa, o -1. */
+function posicionDeAlias(textoNormalizado: string, alias: string): number {
+  const termino = normalizarTexto(alias);
+  if (!termino) return -1;
+  const patron = new RegExp(`(^|[^a-z0-9])${escaparRegex(termino)}([^a-z0-9]|$)`, 'i');
+  const coincidencia = patron.exec(textoNormalizado);
+  return coincidencia ? coincidencia.index + coincidencia[1].length : -1;
+}
+
+/**
+ * Pantallas del catalogo nombradas en un texto, en orden de aparicion y sin
+ * repetir. Es lo que permite leer un SOP que salta de una pantalla a otra
+ * ("...tocas Siguiente y eso te lleva a Pantalla 3...") como un recorrido y no
+ * como una sola pantalla.
+ */
+export function pantallasMencionadas(texto: unknown): Array<{ pantalla: PantallaCatalogo; alias: string }> {
+  const normalizado = normalizarTexto(texto);
+  if (!normalizado) return [];
+
+  const encontradas: Array<{ pantalla: PantallaCatalogo; alias: string; posicion: number }> = [];
+  for (const pantalla of CATALOGO) {
+    let mejor: { alias: string; posicion: number } | null = null;
+    for (const alias of aliasDePantalla(pantalla)) {
+      const posicion = posicionDeAlias(normalizado, alias);
+      if (posicion < 0) continue;
+      if (!mejor || posicion < mejor.posicion) mejor = { alias, posicion };
+    }
+    if (mejor) encontradas.push({ pantalla, alias: mejor.alias, posicion: mejor.posicion });
+  }
+
+  return encontradas
+    .sort((a, b) => a.posicion - b.posicion)
+    .map(({ pantalla, alias }) => ({ pantalla, alias }));
 }
 
 function escaparRegex(valor: string): string {
@@ -653,12 +696,13 @@ export function filtroCasosMongo(fuente: FuenteCasosCatalogo): Record<string, un
 }
 
 /** Fuentes de casos declaradas, para poder ofrecerlas al elicitar. */
-export function fuentesCasosDisponibles(): Array<{ ruta: string; codigo: string; fuente: FuenteCasosCatalogo }> {
+export function fuentesCasosDisponibles(): Array<{ ruta: string; codigo: string; nombre: string; fuente: FuenteCasosCatalogo }> {
   return CATALOGO
     .filter((pantalla) => pantalla.fuente_casos)
     .map((pantalla) => ({
       ruta: pantalla.ruta,
       codigo: pantalla.codigo,
+      nombre: pantalla.nombre,
       fuente: pantalla.fuente_casos as FuenteCasosCatalogo,
     }));
 }
