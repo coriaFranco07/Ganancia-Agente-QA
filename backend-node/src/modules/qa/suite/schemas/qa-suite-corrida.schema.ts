@@ -2,7 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { CategoriaQaSuite, ModoQaSuite } from './qa-suite-ejecucion.schema';
 
-export type EstadoQaSuiteCorrida = 'corriendo' | 'verde' | 'amarillo' | 'rojo';
+/** Ver `EstadoQaSuiteEjecucion` para la distincion `rojo` vs `error`: acá es la misma, a nivel corrida. */
+export type EstadoQaSuiteCorrida = 'corriendo' | 'verde' | 'amarillo' | 'rojo' | 'error';
 
 /**
  * Agrupa una corrida de la Suite: N aprendizajes x M categorias, con sus
@@ -31,7 +32,7 @@ export class QaSuiteCorrida {
   @Prop({ type: [String], default: [] })
   ejecuciones: string[];
 
-  @Prop({ required: true, enum: ['corriendo', 'verde', 'amarillo', 'rojo'], default: 'corriendo', index: true })
+  @Prop({ required: true, enum: ['corriendo', 'verde', 'amarillo', 'rojo', 'error'], default: 'corriendo', index: true })
   estado_consolidado: EstadoQaSuiteCorrida;
 
   @Prop({ type: MongooseSchema.Types.Mixed, default: null })

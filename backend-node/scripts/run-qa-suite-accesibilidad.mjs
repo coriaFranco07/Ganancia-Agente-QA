@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import mongoose from 'mongoose';
 import { chromium } from 'playwright-core';
 import {
+  activarAislamientoDatos,
   asegurarUsuario,
   cargarAprendizaje,
   conectarMongo,
@@ -35,8 +36,11 @@ import { derivarEscenarios } from './lib/qa-suite-derivador.mjs';
 const CATEGORIA = 'accesibilidad';
 const backendRoot = process.cwd();
 const repoRoot = resolve(backendRoot, '..');
-const outputDir = resolve(repoRoot, 'outputs/playwright/qa-suite-accesibilidad');
 const cfg = resolverConfigComun();
+if (cfg.demoDegradadoSinEscritorio) {
+  console.warn('Modo demo pedido sin entorno gráfico detectado (sin DISPLAY/WAYLAND_DISPLAY, o CI): corriendo headless.');
+}
+const outputDir = cfg.outputDirEnv ? resolve(repoRoot, cfg.outputDirEnv) : resolve(repoRoot, 'outputs/playwright/qa-suite-accesibilidad');
 
 const aca = dirname(fileURLToPath(import.meta.url));
 const fuenteAxe = readFileSync(resolve(aca, '..', 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');
@@ -63,6 +67,7 @@ try {
   const executablePath = detectarNavegador();
   browser = await chromium.launch({ headless: cfg.headless, ...(executablePath ? { executablePath } : {}), slowMo: cfg.slowMoMs });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-AR' });
+  activarAislamientoDatos(context, cfg.ejecucionId);
   page = await context.newPage();
   page.setDefaultTimeout(cfg.timeoutMs);
   const tomarCaptura = crearTomarCaptura(page, outputDir, capturas, capturasFallidas);
@@ -74,8 +79,9 @@ try {
   const [escenario] = derivarEscenarios(aprendizaje.id, pasos, campos, CATEGORIA);
 
   const auditorias = [];
+  const contexto = {};
   for (const paso of pasos) {
-    const resultado = await ejecutarPaso(page, cfg.frontendUrl, paso, rutaObjetivo, escenario.datos);
+    const resultado = await ejecutarPaso(page, cfg.frontendUrl, paso, rutaObjetivo, escenario.datos, contexto);
     if (paso.tipo === 'navegar') {
       auditorias.push(await auditarPagina(page.url()));
     }

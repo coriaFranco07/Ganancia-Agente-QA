@@ -3,7 +3,15 @@ import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 
 export type CategoriaQaSuite = 'funcional' | 'seguridad' | 'accesibilidad';
 export type ModoQaSuite = 'rapido' | 'demo';
-export type EstadoQaSuiteEjecucion = 'corriendo' | 'verde' | 'rojo';
+/**
+ * `rojo` es "la aplicacion fallo una prueba real" (hay evidencia de que la
+ * corrida llego a evaluar algo). `error` es "la Suite no pudo correr la
+ * prueba" (se cayo la conexion, la pantalla cambio desde la aprobacion,
+ * excedio el tiempo maximo) -no hay evidencia porque nunca se llego a
+ * evaluar nada. Distinguirlos es lo que evita que un runner caido se lea
+ * como "la app esta bien".
+ */
+export type EstadoQaSuiteEjecucion = 'corriendo' | 'verde' | 'rojo' | 'error';
 
 /**
  * Una corrida de UNA categoria sobre UN aprendizaje de SOP Loom.
@@ -29,7 +37,7 @@ export class QaSuiteEjecucion {
   @Prop({ required: true, enum: ['rapido', 'demo'] })
   modo: ModoQaSuite;
 
-  @Prop({ required: true, enum: ['corriendo', 'verde', 'rojo'], index: true })
+  @Prop({ required: true, enum: ['corriendo', 'verde', 'rojo', 'error'], index: true })
   estado: EstadoQaSuiteEjecucion;
 
   @Prop({ required: true, index: true })
@@ -58,6 +66,10 @@ export class QaSuiteEjecucion {
 
   @Prop({ default: '' })
   stderr_tail: string;
+
+  /** Cuantos documentos de `qa_casos` creo esta ejecucion y se borraron al cerrarla (ver Fase 7 del aislamiento de datos). */
+  @Prop({ type: Number, default: 0 })
+  casos_negocio_limpiados?: number;
 }
 
 export type QaSuiteEjecucionDocument = HydratedDocument<QaSuiteEjecucion>;

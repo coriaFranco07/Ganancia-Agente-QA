@@ -132,9 +132,32 @@ export class QaSuiteVistaPreviaDialogComponent {
   }
 }
 
-const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string }[] = [
+interface FrenteAlcance {
+  texto: string;
+  implementado: boolean;
+}
+
+/**
+ * Que cada categoria declare que prueba de verdad, en vez de insinuar que
+ * cubre todo lo que su nombre sugiere. Seguridad es la unica con alcance
+ * parcial hoy: los frentes con `implementado:false` se documentan tambien
+ * en run-qa-suite-seguridad.mjs.
+ */
+const ALCANCE_SEGURIDAD: FrenteAlcance[] = [
+  { texto: 'Sesión: navegador + API sin cookie', implementado: true },
+  { texto: 'Violación de restricción real (¿la acepta el guardado?)', implementado: true },
+  { texto: 'XSS: efecto real (¿se ejecuta al mostrarse?)', implementado: true },
+  { texto: 'Otros payloads de inyección (se envían, sin oráculo todavía)', implementado: false },
+  { texto: 'IDOR', implementado: false },
+  { texto: 'Manipulación de parámetros de negocio', implementado: false },
+  { texto: 'Exposición de datos sensibles en la respuesta', implementado: false },
+  { texto: 'Carga de archivos', implementado: false },
+  { texto: 'Cabeceras de transporte', implementado: false },
+];
+
+const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string; alcance?: FrenteAlcance[] }[] = [
   { id: 'funcional', etiqueta: 'Funcional', descripcion: 'Casos límite calculados sobre las restricciones reales de cada campo.' },
-  { id: 'seguridad', etiqueta: 'Seguridad', descripcion: 'Sesión, inyección y manipulación de parámetros.' },
+  { id: 'seguridad', etiqueta: 'Seguridad', descripcion: 'Sesión y violación de restricciones con oráculo real; XSS con verificación de efecto.', alcance: ALCANCE_SEGURIDAD },
   { id: 'accesibilidad', etiqueta: 'Accesibilidad', descripcion: 'Auditoría WCAG de la pantalla en cada estado del flujo.' },
 ];
 
@@ -203,6 +226,11 @@ const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string 
                     <strong>{{ cat.etiqueta }}</strong>
                     <p>{{ cat.descripcion }}</p>
                   </div>
+                </div>
+                <div class="alcance" *ngIf="cat.alcance" (click)="$event.stopPropagation()">
+                  <span class="alcance-item" *ngFor="let frente of cat.alcance" [class.pendiente]="!frente.implementado">
+                    <mat-icon>{{ frente.implementado ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>{{ frente.texto }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -294,7 +322,7 @@ const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string 
             <strong>{{ etiquetaCategoria(fila.categoria) }}</strong>
             <span class="muted">{{ formatearDuracion(fila.duracion_ms) }}</span>
             <span class="muted">{{ totalPorFila(fila) }} hallazgos</span>
-            <span class="estado-pill" [ngClass]="fila.estado === 'verde' ? 'verde' : (fila.estado === 'rojo' ? 'rojo' : 'corriendo')">{{ fila.estado === 'verde' ? 'Verde' : (fila.estado === 'rojo' ? 'Rojo' : 'Corriendo') }}</span>
+            <span class="estado-pill" [ngClass]="claseSemaforo(fila.estado)">{{ textoSemaforo(fila.estado) }}</span>
           </div>
         </div>
 
@@ -333,7 +361,7 @@ const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string 
   `,
   styles: [`
     :host { display: block; }
-    .qa-page { padding: 24px; display: grid; gap: 16px; max-width: 1200px; }
+    .qa-page { padding: 24px; display: grid; gap: 16px; }
 
     .titulo-seccion h1 { margin: 0; display: flex; align-items: center; gap: 10px; color: #0f172a; font-size: 24px; font-weight: 950; }
     .titulo-seccion h1 mat-icon { color: #2563eb; }
@@ -369,6 +397,12 @@ const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string 
     .check-row .sub { font-size: 11px; color: #64748b; margin-top: 2px; }
     .check-row p { margin: 6px 0 0; font-size: 11px; color: #64748b; line-height: 1.5; }
     .checkbox { width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid #cbd5e1; background: #fff; flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; }
+
+    .alcance { display: flex; flex-direction: column; gap: 5px; padding-top: 8px; border-top: 1px dashed #dbe3f0; cursor: default; }
+    .alcance-item { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #0f172a; font-weight: 700; }
+    .alcance-item mat-icon { font-size: 14px; width: 14px; height: 14px; color: #16a34a; }
+    .alcance-item.pendiente { color: #94a3b8; font-weight: 600; }
+    .alcance-item.pendiente mat-icon { color: #cbd5e1; }
     .checkbox.marcado { background: #2563eb; border-color: #2563eb; }
     .checkbox mat-icon { font-size: 13px; width: 13px; height: 13px; color: #fff; }
     .firmas { display: flex; gap: 6px; }
@@ -392,6 +426,7 @@ const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string 
     .estado-pill.verde { background: #dcfce7; color: #166534; }
     .estado-pill.amarillo { background: #fff2dc; color: #dc7200; }
     .estado-pill.rojo { background: #fee2e2; color: #991b1b; }
+    .estado-pill.error { background: #ede9fe; color: #5b21b6; }
     .estado-pill.info { background: #eff6ff; color: #1d4ed8; }
     .estado-pill.baja { background: #f1f5f9; color: #64748b; }
     .estado-pill.media { background: #fff2dc; color: #dc7200; }
@@ -563,7 +598,7 @@ export class QaPantalla4Component implements OnInit, OnDestroy {
   }
 
   textoSemaforo(estado: string): string {
-    const mapa: Record<string, string> = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', corriendo: 'Corriendo' };
+    const mapa: Record<string, string> = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', error: 'Error', corriendo: 'Corriendo' };
     return mapa[estado] ?? estado;
   }
 
@@ -573,7 +608,7 @@ export class QaPantalla4Component implements OnInit, OnDestroy {
   }
 
   iconoSemaforo(estado: string): string {
-    const mapa: Record<string, string> = { verde: 'check_circle', amarillo: 'warning', rojo: 'error', corriendo: 'hourglass_top' };
+    const mapa: Record<string, string> = { verde: 'check_circle', amarillo: 'warning', rojo: 'error', error: 'cloud_off', corriendo: 'hourglass_top' };
     return mapa[estado] ?? 'help';
   }
 
@@ -590,7 +625,7 @@ export class QaPantalla4Component implements OnInit, OnDestroy {
   textoEstadoCelda(corrida: QaSuiteCorrida, aprendizajeId: string, categoria: CategoriaQaSuite): string {
     const fila = corrida.informe?.por_aprendizaje?.[aprendizajeId]?.tabla_categorias.find((t) => t.categoria === categoria);
     if (!fila) return corrida.estado_consolidado === 'corriendo' ? 'Corriendo' : 'Sin correr';
-    return fila.estado === 'verde' ? 'Verde' : fila.estado === 'rojo' ? 'Rojo' : 'Corriendo';
+    return this.textoSemaforo(fila.estado);
   }
 
   totalHallazgos(informe: InformeAprendizaje): number {

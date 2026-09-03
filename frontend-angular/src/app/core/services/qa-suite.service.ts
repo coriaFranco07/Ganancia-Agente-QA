@@ -5,8 +5,9 @@ import { environment } from '../../../environments/environment';
 
 export type CategoriaQaSuite = 'funcional' | 'seguridad' | 'accesibilidad';
 export type ModoQaSuite = 'rapido' | 'demo';
-export type EstadoQaSuiteEjecucion = 'corriendo' | 'verde' | 'rojo';
-export type EstadoQaSuiteCorrida = 'corriendo' | 'verde' | 'amarillo' | 'rojo';
+/** `rojo` = la app falló una prueba real. `error` = la Suite no pudo correrla (sin evidencia). */
+export type EstadoQaSuiteEjecucion = 'corriendo' | 'verde' | 'rojo' | 'error';
+export type EstadoQaSuiteCorrida = 'corriendo' | 'verde' | 'amarillo' | 'rojo' | 'error';
 
 export interface AprendizajeAprobado {
   id: string;

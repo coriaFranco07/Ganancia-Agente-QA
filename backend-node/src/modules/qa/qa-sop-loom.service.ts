@@ -856,6 +856,12 @@ export class QaSopLoomService {
           tipo: campo.tipo,
           obligatorio: campo.obligatorio,
           testid: campo.testid,
+          alias: campo.alias,
+          // `restriccion` es la que declara el catalogo (mas lo que haya pisado
+          // una regla de validacion via aplicarReglasCampos): sin ella, la
+          // Suite de Calidad deriva valores de prueba genericos que no pasan
+          // la validacion real del formulario (docs/plan_suite_calidad.md).
+          restriccion: campo.restriccion ?? null,
           fuente: {
             tipo: 'navegacion',
             ref: inspeccionTramo.id,

@@ -13,7 +13,8 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Model } from 'mongoose';
 import { QaSopLoomAprendizaje, QaSopLoomAprendizajeDocument } from '../schemas/qa-sop-loom-aprendizaje.schema';
-import { CategoriaQaSuite, ModoQaSuite, QaSuiteEjecucion, QaSuiteEjecucionDocument } from './schemas/qa-suite-ejecucion.schema';
+import { QaCaso, QaCasoDocument } from '../schemas/qa-caso.schema';
+import { CategoriaQaSuite, EstadoQaSuiteEjecucion, ModoQaSuite, QaSuiteEjecucion, QaSuiteEjecucionDocument } from './schemas/qa-suite-ejecucion.schema';
 import { QaSuiteCorrida, QaSuiteCorridaDocument } from './schemas/qa-suite-corrida.schema';
 import { QaSuiteHallazgo, QaSuiteHallazgoDocument } from './schemas/qa-suite-hallazgo.schema';
 import { QaSuiteDerivadorService } from './qa-suite-derivador.service';
@@ -25,9 +26,25 @@ const SCRIPT_POR_CATEGORIA: Record<CategoriaQaSuite, string> = {
   accesibilidad: 'run-qa-suite-accesibilidad.mjs',
 };
 
-const MAX_MS_POR_MODO: Record<ModoQaSuite, number> = {
-  rapido: 4 * 60 * 1000,
-  demo: 10 * 60 * 1000,
+/**
+ * El tiempo máximo de una corrida escala con la cantidad de escenarios
+ * derivados: un aprendizaje con muchos campos genera muchos escenarios (uno
+ * por candidato, por campo), y un presupuesto fijo por modo no alcanza para
+ * flujos grandes ni sobra para los chicos. `demo` suma el costo del slowMo
+ * visual, que un escenario en `rapido` no paga. El techo evita que un
+ * aprendizaje con decenas de campos deje una corrida colgada indefinidamente.
+ */
+const TIEMPO_BASE_MS: Record<ModoQaSuite, number> = {
+  rapido: 60 * 1000,
+  demo: 90 * 1000,
+};
+const TIEMPO_POR_ESCENARIO_MS: Record<ModoQaSuite, number> = {
+  rapido: 20 * 1000,
+  demo: 35 * 1000,
+};
+const TIEMPO_MAXIMO_MS: Record<ModoQaSuite, number> = {
+  rapido: 20 * 60 * 1000,
+  demo: 30 * 60 * 1000,
 };
 
 type QaSopLoomLean = QaSopLoomAprendizaje & { _id?: unknown };
@@ -43,6 +60,7 @@ export class QaSuiteRunnerService {
     @InjectModel(QaSuiteEjecucion.name) private readonly ejecuciones: Model<QaSuiteEjecucionDocument>,
     @InjectModel(QaSuiteCorrida.name) private readonly corridas: Model<QaSuiteCorridaDocument>,
     @InjectModel(QaSuiteHallazgo.name) private readonly hallazgosModel: Model<QaSuiteHallazgoDocument>,
+    @InjectModel(QaCaso.name) private readonly qaCasos: Model<QaCasoDocument>,
     private readonly derivador: QaSuiteDerivadorService,
   ) {}
 
@@ -196,6 +214,14 @@ export class QaSuiteRunnerService {
       throw new InternalServerErrorException(`No encontré el runner de la Suite en ${scriptPath}.`);
     }
 
+    // Mismo cálculo que usa `previsualizar()`: cuantos más escenarios derive
+    // el aprendizaje, más tiempo necesita la corrida para completarlos a todos.
+    const definicion = this.objeto(doc.definicion_ejecutable);
+    const pasos = Array.isArray(definicion['pasos_ejecutables']) ? (definicion['pasos_ejecutables'] as never[]) : [];
+    const campos = this.mapearCampos(doc.campos);
+    const escenarios = this.derivador.derivarEscenarios(aprendizajeId, pasos, campos, categoria);
+    const maxMs = this.calcularTiempoMaximo(escenarios.length, modo);
+
     const ejecucionId = `QA-SUITE-${categoria.toUpperCase()}-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${randomUUID().slice(0, 8)}`;
     const args = modo === 'demo' ? [scriptPath, '--demo'] : [scriptPath];
 
@@ -214,12 +240,12 @@ export class QaSuiteRunnerService {
 
     const child = spawn(process.execPath, args, {
       cwd: process.cwd(),
-      env: this.envRunner(aprendizajeId, modo),
+      env: this.envRunner(aprendizajeId, modo, ejecucionId),
       windowsHide: true,
     });
 
     this.procesos.set(clave, child);
-    this.observarProceso(child, clave, ejecucionId, categoria, aprendizajeId, corridaId, modo);
+    this.observarProceso(child, clave, ejecucionId, categoria, aprendizajeId, corridaId, maxMs);
 
     return ejecucionDoc.toObject() as QaSuiteEjecucionLean;
   }
@@ -231,12 +257,11 @@ export class QaSuiteRunnerService {
     categoria: CategoriaQaSuite,
     aprendizajeId: string,
     corridaId: string,
-    modo: ModoQaSuite,
+    maxMs: number,
   ): void {
     let stdout = '';
     let stderr = '';
     let finalizado = false;
-    const maxMs = MAX_MS_POR_MODO[modo];
     const timer = setTimeout(() => {
       child.kill();
       finalizar(null, new Error(`La corrida de ${categoria} excedió el tiempo máximo de ${Math.round(maxMs / 60000)} minuto(s).`));
@@ -270,21 +295,41 @@ export class QaSuiteRunnerService {
     error: Error | null,
   ): Promise<void> {
     const salida = `${stdout}\n${stderr}`;
-    const verde = new RegExp(`QA Suite ${categoria}:\\s*verde`, 'i').test(salida) && exitCode === 0;
+    const scriptDijoVerde = new RegExp(`QA Suite ${categoria}:\\s*verde`, 'i').test(salida) && exitCode === 0;
     const evidenciaPath = /-\s*evidencia=(.+)/i.exec(salida)?.[1]?.trim() ?? '';
+    const evidencia = await this.leerEvidencia(evidenciaPath);
+
+    // `rojo` exige evidencia real: el runner llego a evaluar algo y no le
+    // fue bien. Sin evidencia (se cayo la conexion, la pantalla cambio desde
+    // la aprobacion, lo mato el timeout) es `error` -la Suite no corrio la
+    // prueba, no que la app la haya fallado. Nunca confundir una cosa con la
+    // otra es lo que hace que el semaforo se pueda tomar en serio.
+    const estado: EstadoQaSuiteEjecucion = error ? 'error' : scriptDijoVerde ? 'verde' : evidencia ? 'rojo' : 'error';
+
     const detalle =
       /-\s*detalle=(.+)$/im.exec(salida)?.[1]?.trim() ||
       error?.message ||
-      (verde ? 'Corrida finalizada correctamente.' : `Runner finalizó con código ${exitCode ?? 'sin código'}.`);
+      (estado === 'verde'
+        ? 'Corrida finalizada correctamente.'
+        : estado === 'error'
+          ? 'La Suite no pudo completar la corrida.'
+          : `Runner finalizó con código ${exitCode ?? 'sin código'}.`);
 
-    const evidencia = await this.leerEvidencia(evidenciaPath);
     const capturas = Array.isArray(evidencia?.['capturas']) ? (evidencia!['capturas'] as string[]) : [];
+
+    // La Suite prueba requisitos tecnicos, no negocio: cualquier caso que un
+    // escenario haya creado (el script lo marca con `origen.suite_ejecucion_id`
+    // via interceptor de red, ver `activarAislamientoDatos` en qa-suite-comun.mjs)
+    // se borra aca, sin condicion -corra como corra la ejecucion, incluida
+    // la que mato el timeout- para que no quede permanente en `qa_casos`.
+    const limpieza = await this.qaCasos.deleteMany({ 'origen.suite_ejecucion_id': ejecucionId }).catch(() => null);
+    const casosNegocioLimpiados = limpieza?.deletedCount ?? 0;
 
     await this.ejecuciones.updateOne(
       { id: ejecucionId },
       {
         $set: {
-          estado: verde ? 'verde' : 'rojo',
+          estado,
           finalizado_en: new Date().toISOString(),
           exit_code: exitCode,
           detalle,
@@ -292,6 +337,7 @@ export class QaSuiteRunnerService {
           capturas,
           stdout_tail: this.tail(stdout),
           stderr_tail: this.tail(stderr),
+          casos_negocio_limpiados: casosNegocioLimpiados,
         },
       },
     );
@@ -392,12 +438,26 @@ export class QaSuiteRunnerService {
       .lean<(QaSuiteHallazgo & { _id?: unknown })[]>();
 
     const informe = await this.armarInforme(corrida, ejecuciones, hallazgos);
-    const estadoConsolidado = this.calcularEstadoConsolidado(hallazgos);
+    const estadoConsolidado = this.calcularEstadoConsolidado(ejecuciones, hallazgos);
 
     await this.corridas.updateOne({ id: corridaId }, { $set: { estado_consolidado: estadoConsolidado, informe } });
   }
 
-  private calcularEstadoConsolidado(hallazgos: QaSuiteHallazgo[]): QaSuiteCorrida['estado_consolidado'] {
+  /**
+   * Prioriza el estado de las ejecuciones por sobre la severidad de los
+   * hallazgos: una ejecucion que no pudo correr (`error`) o que la
+   * aplicacion fallo (`rojo`) decide el consolidado antes de contar nada.
+   * Solo cuando todas las ejecuciones corrieron limpias se mira si de
+   * todas formas quedaron hallazgos (`amarillo`) o no (`verde`). Es lo que
+   * evita que una corrida sin evidencia real (backend caido, pantalla que
+   * cambio desde la aprobacion) se lea como "todo salio bien".
+   */
+  private calcularEstadoConsolidado(
+    ejecuciones: QaSuiteEjecucionLean[],
+    hallazgos: QaSuiteHallazgo[],
+  ): QaSuiteCorrida['estado_consolidado'] {
+    if (ejecuciones.some((e) => e.estado === 'error')) return 'error';
+    if (ejecuciones.some((e) => e.estado === 'rojo')) return 'rojo';
     if (hallazgos.some((h) => h.severidad === 'alta' || h.severidad === 'critica')) return 'rojo';
     if (hallazgos.length > 0) return 'amarillo';
     return 'verde';
@@ -435,7 +495,7 @@ export class QaSuiteRunnerService {
           disparado_en: corrida.disparado_en,
           modo: corrida.modo,
         },
-        semaforo: this.calcularEstadoConsolidado(hallazgosDelFlujo),
+        semaforo: this.calcularEstadoConsolidado(ejecucionesDelFlujo, hallazgosDelFlujo),
         tabla_categorias: tablaCategorias,
         hallazgos_priorizados: this.priorizar(hallazgosDelFlujo),
         evidencia: ejecucionesDelFlujo.flatMap((e) => e.capturas ?? []),
@@ -498,11 +558,17 @@ export class QaSuiteRunnerService {
     }
   }
 
-  private envRunner(aprendizajeId: string, modo: ModoQaSuite): NodeJS.ProcessEnv {
+  private envRunner(aprendizajeId: string, modo: ModoQaSuite, ejecucionId: string): NodeJS.ProcessEnv {
     const demo = modo === 'demo';
     return {
       ...process.env,
       AUDITORIA_QA_SUITE_APRENDIZAJE: aprendizajeId,
+      // Con estas dos, el script marca cada caso que crea con esta ejecucion
+      // (para poder borrarlos al cerrar) y escribe su evidencia en una
+      // carpeta propia (para no pisarse con otra ejecucion de la misma
+      // categoria en la misma corrida).
+      AUDITORIA_QA_SUITE_EJECUCION: ejecucionId,
+      AUDITORIA_QA_SUITE_OUTPUT_DIR: `outputs/playwright/qa-suite/${ejecucionId}`,
       AUDITORIA_PLAYWRIGHT_DEMO: demo ? 'true' : 'false',
       PLAYWRIGHT_HEADLESS: demo ? 'false' : 'true',
       PLAYWRIGHT_SLOWMO_MS: demo ? process.env.PLAYWRIGHT_SLOWMO_MS ?? '1800' : '0',
@@ -516,8 +582,13 @@ export class QaSuiteRunnerService {
   }
 
   /**
-   * `doc.campos` trae `nombre` en vez de `clave` y no siempre trae
-   * `restriccion`. La adapta a la forma que espera el motor de derivacion.
+   * `doc.campos` (nivel raiz del aprendizaje) trae `nombre` en vez de
+   * `clave`. La adapta a la forma que espera el motor de derivacion.
+   * Aprendizajes compilados antes de que `compilar()` empezara a persistir
+   * `restriccion` (ver qa-sop-loom.service.ts) no la van a traer -de ahi el
+   * default a objeto vacio- y van a necesitar volver a guardarse desde SOP
+   * Loom para que la Suite derive valores que respeten sus restricciones
+   * reales.
    */
   private mapearCampos(camposCrudos: unknown): CampoCatalogo[] {
     if (!Array.isArray(camposCrudos)) return [];
@@ -533,6 +604,11 @@ export class QaSuiteRunnerService {
         restriccion: this.objeto(campo['restriccion']),
       };
     });
+  }
+
+  private calcularTiempoMaximo(cantidadEscenarios: number, modo: ModoQaSuite): number {
+    const calculado = TIEMPO_BASE_MS[modo] + Math.max(cantidadEscenarios, 1) * TIEMPO_POR_ESCENARIO_MS[modo];
+    return Math.min(calculado, TIEMPO_MAXIMO_MS[modo]);
   }
 
   private hash(valor: unknown): string {

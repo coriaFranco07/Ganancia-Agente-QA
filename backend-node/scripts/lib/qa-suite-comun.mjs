@@ -17,6 +17,18 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import mongoose from 'mongoose';
 
+/**
+ * Heuristica, no una garantia: en CI se asume que no hay escritorio: en
+ * Linux, que haya sesion X11 o Wayland; en macOS/Windows, que sea una sesion
+ * interactiva (no hay una señal generica y confiable de "hay pantalla" ahi,
+ * asi que se asume que si la hay salvo que sea CI).
+ */
+function hayEntornoGrafico() {
+  if (process.env.CI) return false;
+  if (process.platform === 'linux') return Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+  return true;
+}
+
 export function resolverConfigComun() {
   const frontendUrl = (process.env.AUDITORIA_FRONTEND_URL ?? 'http://localhost:4200').replace(/\/$/, '');
   const mongodbUri =
@@ -24,11 +36,40 @@ export function resolverConfigComun() {
   const correo = process.env.AUDITORIA_QA_CORREO ?? 'qa-local@auditoria.test';
   const contrasena = process.env.AUDITORIA_QA_PASSWORD ?? 'qa-local-123456';
   const aprendizajeId = process.env.AUDITORIA_QA_SUITE_APRENDIZAJE;
+  // Id de la ejecucion que dispara el orquestador: marca cada documento de
+  // negocio que la corrida cree, para poder borrarlos a todos al cerrar
+  // (ver `activarAislamientoDatos`). Vacio si el script se corre a mano.
+  const ejecucionId = process.env.AUDITORIA_QA_SUITE_EJECUCION ?? '';
+  // Directorio de salida propio de esta ejecucion, fijado por el
+  // orquestador para que dos corridas de la misma categoria no se pisen la
+  // evidencia ni las capturas. Vacio si el script se corre a mano -en ese
+  // caso cada script cae a su carpeta fija de siempre.
+  const outputDirEnv = process.env.AUDITORIA_QA_SUITE_OUTPUT_DIR ?? '';
   const timeoutMs = Number(process.env.AUDITORIA_PLAYWRIGHT_TIMEOUT_MS ?? 90_000);
   const modoDemo = process.argv.includes('--demo') || process.env.AUDITORIA_PLAYWRIGHT_DEMO === 'true';
-  const headless = modoDemo ? false : process.env.PLAYWRIGHT_HEADLESS !== 'false';
-  const slowMoMs = Number(process.env.PLAYWRIGHT_SLOWMO_MS ?? (modoDemo ? 1800 : 0));
-  return { frontendUrl, mongodbUri, correo, contrasena, aprendizajeId, timeoutMs, modoDemo, headless, slowMoMs };
+  // El modo demo abre una ventana real de Chromium para poder mirar la
+  // corrida paso a paso: eso solo funciona con un entorno grafico atras
+  // (X11/Wayland en Linux, o una sesion interactiva en macOS/Windows). Si el
+  // backend termina corriendo en un servidor sin escritorio, degradar a
+  // headless en vez de que `chromium.launch({headless:false})` reviente.
+  const demoConEscritorio = modoDemo && hayEntornoGrafico();
+  const demoDegradadoSinEscritorio = modoDemo && !demoConEscritorio;
+  const headless = demoConEscritorio ? false : process.env.PLAYWRIGHT_HEADLESS !== 'false';
+  const slowMoMs = Number(process.env.PLAYWRIGHT_SLOWMO_MS ?? (demoConEscritorio ? 1800 : 0));
+  return {
+    frontendUrl,
+    mongodbUri,
+    correo,
+    contrasena,
+    aprendizajeId,
+    ejecucionId,
+    outputDirEnv,
+    timeoutMs,
+    modoDemo,
+    demoDegradadoSinEscritorio,
+    headless,
+    slowMoMs,
+  };
 }
 
 export async function conectarMongo(mongodbUri) {
@@ -172,6 +213,35 @@ async function inventarioPantalla(page) {
   return elementos.filter((item) => item.testid).sort((a, b) => a.testid.localeCompare(b.testid));
 }
 
+/**
+ * Marca cada caso de negocio que la corrida cree, para que el orquestador
+ * pueda borrarlos a todos al cerrar la ejecucion (`qa-suite-runner.service.ts`
+ * `finalizarEjecucion`), corra la Suite como corra: la Suite prueba
+ * requisitos tecnicos, no negocio, y no tiene sentido que sus datos
+ * sinteticos -incluidos los payloads de seguridad- queden permanentes en
+ * `qa_casos`, en el mismo cluster que usa el resto del equipo.
+ *
+ * Intercepta el POST a `/api/qa/casos` y le agrega
+ * `origen.suite_ejecucion_id` al cuerpo antes de que salga: no depende de
+ * que el frontend o el backend sepan nada de la Suite, y cubre cualquier
+ * pantalla cuyo ultimo paso sea guardar un caso.
+ */
+export function activarAislamientoDatos(context, ejecucionId) {
+  if (!ejecucionId) return;
+  context.route('**/api/qa/casos', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'POST') return route.continue();
+    try {
+      const datos = JSON.parse(request.postData() || '{}');
+      const origen = objeto(datos.origen);
+      datos.origen = { ...origen, suite_ejecucion_id: ejecucionId };
+      await route.continue({ postData: JSON.stringify(datos) });
+    } catch {
+      await route.continue();
+    }
+  });
+}
+
 export async function iniciarSesion(page, frontendUrl, correo, contrasena) {
   await page.goto(`${frontendUrl}/login`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="auth-email-input"]').fill(correo);
@@ -190,10 +260,13 @@ export async function iniciarSesion(page, frontendUrl, correo, contrasena) {
 /**
  * Ejecuta un paso del aprendizaje contra la pantalla actual. `datos` viene
  * del motor de derivacion (clave -> valor), nunca de un caso congelado.
- * `verificar_fila` depende de un id de caso QA y no aplica a la Suite: se
- * reporta omitido en vez de fallar.
+ *
+ * `contexto` es un objeto mutable que el LLAMADOR crea una vez por escenario
+ * (`{}`) y pasa en cada paso: `verificar_fila` (mas abajo) lo necesita para
+ * saber que id acaba de crear el paso de guardado anterior, ya que la Suite
+ * no tiene un caso QA congelado del que leerlo.
  */
-export async function ejecutarPaso(page, frontendUrl, paso, rutaObjetivo, datos) {
+export async function ejecutarPaso(page, frontendUrl, paso, rutaObjetivo, datos, contexto = {}) {
   const tipo = texto(paso.tipo);
   const selectorPaso = texto(paso.selector);
 
@@ -227,6 +300,10 @@ export async function ejecutarPaso(page, frontendUrl, paso, rutaObjetivo, datos)
         }),
         boton.click(),
       ]);
+      if (response.ok()) {
+        const idCreado = await idDesdeRespuesta(response);
+        if (idCreado) contexto.ultimo_id_creado = idCreado;
+      }
       return { estado: 'ok', detalle: `Click en ${selectorPaso} con respuesta ${response.status()}`, response };
     }
     await boton.click();
@@ -254,10 +331,41 @@ export async function ejecutarPaso(page, frontendUrl, paso, rutaObjetivo, datos)
   }
 
   if (tipo === 'verificar_fila') {
-    return { estado: 'omitido', detalle: 'verificar_fila depende de un caso QA congelado: no aplica a la Suite.' };
+    const idCreado = texto(contexto.ultimo_id_creado);
+    if (!idCreado) {
+      return {
+        estado: 'omitido',
+        detalle: 'No se pudo verificar la fila: ningún paso de guardado anterior devolvió un id (¿la respuesta no trae `id`, o el guardado no llegó a ejecutarse?).',
+      };
+    }
+    const selectorFila = `[data-testid="${texto(paso.prefijo_fila)}${idCreado}"]`;
+    try {
+      await page.locator(selectorFila).first().waitFor({ state: 'visible', timeout: 30_000 });
+      return { estado: 'ok', detalle: `El caso ${idCreado} aparece en el listado.` };
+    } catch {
+      return { estado: 'hallazgo', detalle: `El caso ${idCreado} se guardó pero no aparece en el listado (${selectorFila}).` };
+    }
   }
 
   return { estado: 'omitido', detalle: `Tipo de paso no soportado por la Suite: ${tipo}` };
+}
+
+/**
+ * El id de un caso recien creado sale de la respuesta real del guardado
+ * (`qa-casos.service.ts` devuelve el documento completo, con `id`), nunca de
+ * un caso QA congelado -eso es lo que permite implementar `verificar_fila`
+ * sin depender de `qa_casos` como fuente. Playwright cachea el body de la
+ * respuesta: leerlo aca no le saca la posibilidad de leerlo de nuevo a quien
+ * llamo a este paso (p. ej. el oraculo de seguridad).
+ */
+export async function idDesdeRespuesta(response) {
+  try {
+    const body = await response.json();
+    const id = body && typeof body === 'object' ? body.id : null;
+    return typeof id === 'string' && id ? id : '';
+  } catch {
+    return '';
+  }
 }
 
 async function aplicarEspera(page, paso) {
@@ -320,8 +428,12 @@ export function detalleError(error) {
 
 /**
  * `doc.campos` (nivel raiz del aprendizaje, no `definicion_ejecutable.campos`
- * -ese no existe) trae `nombre` en vez de `clave` y no siempre trae
- * `restriccion`. La adapta a la forma que espera el motor de derivacion.
+ * -ese no existe) trae `nombre` en vez de `clave`. La adapta a la forma que
+ * espera el motor de derivacion. Aprendizajes compilados antes de que
+ * `compilar()` empezara a persistir `restriccion` (ver qa-sop-loom.service.ts)
+ * no la van a traer -de ahi el default a objeto vacio- y van a necesitar
+ * volver a guardarse desde SOP Loom para que la Suite derive valores que
+ * respeten sus restricciones reales.
  */
 export function mapearCampos(camposCrudos) {
   return (Array.isArray(camposCrudos) ? camposCrudos : []).map((c) => ({

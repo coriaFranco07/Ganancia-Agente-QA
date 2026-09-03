@@ -12,6 +12,8 @@ export interface EscenarioDerivado {
   campo_bajo_prueba: string | null;
   valor_bajo_prueba: string | null;
   motivo: string;
+  /** Solo en seguridad: que oraculo le aplica (ver CandidatoValor en qa-suite-payloads.ts). */
+  tipo?: 'inyeccion' | 'violacion_restriccion';
   /** clave -> valor, en la misma forma que `caso.datos` en el ejecutor de pasos de SOP Loom. */
   datos: Record<string, string>;
 }
@@ -21,8 +23,10 @@ export interface EscenarioDerivado {
  * para una categoria de la Suite.
  *
  * No toca `qa_casos` en ningun punto: los valores salen de la restriccion
- * real que cada campo ya trae en `definicion_ejecutable.campos` (catalogo +
- * reglas de validacion resueltas al compilar el aprendizaje). Mismo
+ * real que cada campo ya trae en `campos` (nivel raiz del aprendizaje, no
+ * `definicion_ejecutable`: catalogo + reglas de validacion resueltas al
+ * compilar el aprendizaje, ver `compilar()` en qa-sop-loom.service.ts).
+ * Este `campos` ya le llega adaptado por `mapearCampos()`. Mismo
  * aprendizaje + misma categoria -> exactamente los mismos escenarios, siempre
  * -eso es lo que permite comparar una corrida contra la anterior.
  *
@@ -74,6 +78,7 @@ export class QaSuiteDerivadorService {
           campo_bajo_prueba: campo.clave,
           valor_bajo_prueba: candidato.valor,
           motivo: candidato.motivo,
+          tipo: candidato.tipo,
           datos,
         });
       });
