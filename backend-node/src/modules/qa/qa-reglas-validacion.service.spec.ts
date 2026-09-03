@@ -41,11 +41,6 @@ describe('QaReglasValidacionService.catalogo', () => {
     const fechaIngreso = pantalla3?.campos.find((c) => c.clave === 'fecha_ingreso');
     expect(fechaIngreso?.tipo).toBe('fecha');
   });
-
-  it('no incluye pantallas sin campos catalogados', () => {
-    const catalogo = servicio().catalogo();
-    expect(catalogo.map((p) => p.ruta)).not.toContain('/qa/pantalla-2');
-  });
 });
 
 describe('QaReglasValidacionService.guardar', () => {

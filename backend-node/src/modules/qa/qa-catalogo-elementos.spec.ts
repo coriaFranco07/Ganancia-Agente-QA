@@ -4,6 +4,7 @@ import {
   aplicarReglasCampos,
   buscarPantallaPorRuta,
   pantallaPorOrigenCaso,
+  pantallasMencionadas,
   tipoDeCampo,
   validarDatosCampos,
   validarValorCampo,
@@ -290,8 +291,50 @@ describe('pantallaPorOrigenCaso', () => {
     expect(pantallaPorOrigenCaso(caso)?.ruta).toBe('/qa/pantalla-1');
   });
 
+  it('reconoce un caso de Legajo de Cliente por origen.tipo, sin depender del nombre visible', () => {
+    const caso = { origen: { tipo: 'formulario_cliente_basico' } };
+    expect(pantallaPorOrigenCaso(caso)?.ruta).toBe('/qa/pantalla-3');
+  });
+
   it('devuelve null si el origen no matchea ninguna pantalla con fuente de casos', () => {
     expect(pantallaPorOrigenCaso({ origen: { tipo: 'algo_desconocido' } })).toBeNull();
     expect(pantallaPorOrigenCaso({})).toBeNull();
+  });
+});
+
+describe('pantallasMencionadas', () => {
+  it('devuelve vacio si el texto no nombra ninguna pantalla', () => {
+    expect(pantallasMencionadas('Completo el formulario y guardo.')).toEqual([]);
+    expect(pantallasMencionadas('')).toEqual([]);
+  });
+
+  it('reconoce una pantalla por su forma corta ("Pantalla 3")', () => {
+    const encontradas = pantallasMencionadas('Entro a Pantalla 3 y cargo el CUIL.');
+    expect(encontradas.map((item) => item.pantalla.ruta)).toEqual(['/qa/pantalla-3']);
+  });
+
+  it('reconoce una pantalla por su ruta', () => {
+    const encontradas = pantallasMencionadas('Abro /qa/pantalla-1 y completo el legajo.');
+    expect(encontradas.map((item) => item.pantalla.ruta)).toEqual(['/qa/pantalla-1']);
+  });
+
+  it('devuelve varias pantallas en el orden en que el SOP las nombra', () => {
+    const texto = [
+      'Arranco en Pantalla 1 y cargo el legajo.',
+      'Toco Siguiente y eso me lleva a Pantalla 3.',
+      'Ahi completo el CUIL y guardo.',
+    ].join('\n');
+    const encontradas = pantallasMencionadas(texto);
+    expect(encontradas.map((item) => item.pantalla.ruta)).toEqual(['/qa/pantalla-1', '/qa/pantalla-3']);
+  });
+
+  it('no repite una pantalla nombrada varias veces y respeta su primera aparicion', () => {
+    const texto = 'En Pantalla 3 cargo el caso. Antes paso por Pantalla 1. Vuelvo a Pantalla 3 y guardo.';
+    const encontradas = pantallasMencionadas(texto);
+    expect(encontradas.map((item) => item.pantalla.ruta)).toEqual(['/qa/pantalla-3', '/qa/pantalla-1']);
+  });
+
+  it('no confunde "pantalla 1" con "pantalla 10" ni matchea fragmentos', () => {
+    expect(pantallasMencionadas('Voy a la pantalla 10 del sistema viejo.')).toEqual([]);
   });
 });

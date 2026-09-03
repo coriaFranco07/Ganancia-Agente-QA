@@ -130,6 +130,28 @@ export class QaPantallaInspectorService {
     };
   }
 
+  /**
+   * Id de la inspección más reciente de una ruta que todavía tiene la captura
+   * en disco (las viejas se purgan). Sirve para mostrar una foto de una
+   * pantalla que el SOP nombra aunque el flujo actual no la haya inspeccionado
+   * a ella, sino a otra. Si nunca se inspeccionó esa ruta, o la captura ya se
+   * borró, devuelve null: no se inventa una imagen.
+   */
+  async ultimaConCaptura(rutaEntrada: unknown): Promise<string | null> {
+    const ruta = this.normalizarRuta(rutaEntrada);
+    if (!ruta) return null;
+    const docs = await this.inspecciones
+      .find({ ruta, activa: { $ne: false } })
+      .sort({ inspeccionada_en: -1 })
+      .limit(5)
+      .lean<QaInspeccionPantalla[]>();
+    for (const doc of docs) {
+      const captura = this.texto(doc.captura_path);
+      if (captura && existsSync(resolve(captura))) return this.texto(doc.id);
+    }
+    return null;
+  }
+
   async captura(idEntrada: unknown): Promise<{ buffer: Buffer; nombre: string }> {
     const id = this.texto(idEntrada);
     const doc = await this.inspecciones.findOne({ id, activa: { $ne: false } }).lean<QaInspeccionPantalla>();

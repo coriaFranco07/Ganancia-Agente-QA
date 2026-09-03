@@ -10,6 +10,10 @@ import {
   QaSopLoomAprendizaje,
   QaSopLoomAprendizajeDocument,
 } from './schemas/qa-sop-loom-aprendizaje.schema';
+import {
+  QaSopLoomEjecucion,
+  QaSopLoomEjecucionDocument,
+} from './schemas/qa-sop-loom-ejecucion.schema';
 import { QaCaso, QaCasoDocument } from './schemas/qa-caso.schema';
 import {
   AccionCatalogo,
@@ -22,6 +26,7 @@ import {
   datosDesdeCaso,
   filtroCasosMongo,
   mencionaAlias,
+  pantallasMencionadas,
 } from './qa-catalogo-elementos';
 import {
   ElementoNavegado,
@@ -82,6 +87,24 @@ interface Consideracion {
   fuente: { tipo: 'sop_loom'; paso_aprendido?: number };
 }
 
+/**
+ * Una pantalla que el SOP nombra. `cubierta` distingue la que el plan
+ * ejecutable realmente opera de las que el texto menciona pero todavia no se
+ * automatizan: hoy el motor compila una sola pantalla por flujo.
+ */
+interface PantallaRecorrida {
+  orden: number;
+  codigo: string;
+  ruta: string;
+  nombre: string;
+  instrumentada: boolean;
+  cubierta: boolean;
+  pasos: number;
+  campos: number;
+  /** Id de inspección con la que pedir la foto de esta pantalla (`GET .../captura`), o '' si no hay ninguna. */
+  inspeccion_id: string;
+}
+
 interface Compilacion {
   pantalla: PantallaCatalogo | null;
   campos: Record<string, unknown>[];
@@ -91,6 +114,7 @@ interface Compilacion {
   consideraciones: Consideracion[];
   pendientes: string[];
   inspeccion: InspeccionPantalla | null;
+  recorrido: PantallaRecorrida[];
 }
 
 /**
@@ -121,6 +145,7 @@ export class QaSopLoomService {
     @InjectModel(QaCaso.name) private readonly casos: Model<QaCasoDocument>,
     @Optional() private readonly inspector?: QaPantallaInspectorService,
     @Optional() private readonly reglasValidacion?: QaReglasValidacionService,
+    @Optional() @InjectModel(QaSopLoomEjecucion.name) private readonly ejecucionesHistorial?: Model<QaSopLoomEjecucionDocument>,
   ) {}
 
   async listar(): Promise<Record<string, unknown>[]> {
@@ -493,6 +518,7 @@ export class QaSopLoomService {
       cwd: process.cwd(),
     };
 
+    const iniciadaEn = new Date().toISOString();
     await this.aprendizajes.updateOne(
       { id: doc.id },
       {
@@ -501,12 +527,26 @@ export class QaSopLoomService {
             id: ejecucionId,
             estado: 'corriendo',
             modo,
-            iniciada_en: new Date().toISOString(),
+            iniciada_en: iniciadaEn,
             comando,
           },
         },
       },
     );
+
+    // `ultima_ejecucion` se pisa en cada corrida: este registro aparte es lo
+    // que permite despues contar cuantas veces se corrio cada pantalla.
+    const definicion = this.objeto(doc.definicion_ejecutable);
+    await this.ejecucionesHistorial?.create({
+      id: ejecucionId,
+      aprendizaje_id: doc.id,
+      ruta: doc.ruta,
+      pantalla_nombre: buscarPantallaPorRuta(doc.ruta)?.nombre || doc.nombre,
+      modo,
+      estado: 'corriendo',
+      iniciada_en: iniciadaEn,
+      casos_count: this.arrayObjetos(definicion['casos']).length,
+    }).catch(() => undefined);
 
     const child = spawn(process.execPath, args, {
       cwd: process.cwd(),
@@ -570,6 +610,7 @@ export class QaSopLoomService {
       || error?.message
       || (verde ? 'Aprendizaje ejecutado correctamente.' : `Runner finalizó con código ${exitCode ?? 'sin código'}.`);
 
+    const finalizadaEn = new Date().toISOString();
     await this.aprendizajes.updateOne(
       { id: aprendizajeId, 'ultima_ejecucion.id': ejecucionId },
       {
@@ -577,7 +618,7 @@ export class QaSopLoomService {
           ultima_ejecucion: {
             id: ejecucionId,
             estado: verde ? 'verde' : 'rojo',
-            finalizada_en: new Date().toISOString(),
+            finalizada_en: finalizadaEn,
             exit_code: exitCode,
             detalle,
             evidencia_path: evidenciaPath,
@@ -587,6 +628,19 @@ export class QaSopLoomService {
         },
       },
     );
+
+    await this.ejecucionesHistorial?.updateOne(
+      { id: ejecucionId },
+      {
+        $set: {
+          estado: verde ? 'verde' : 'rojo',
+          finalizada_en: finalizadaEn,
+          exit_code: exitCode,
+          detalle,
+          evidencia_path: evidenciaPath,
+        },
+      },
+    ).catch(() => undefined);
   }
 
   private async buscar(id: string): Promise<QaSopLoomLean> {
@@ -612,17 +666,26 @@ export class QaSopLoomService {
     const filtro: Record<string, unknown> = { 'ultima_ejecucion.estado': 'corriendo' };
     if (idsActivos.length > 0) filtro['id'] = { $nin: idsActivos };
 
+    const detalleInterrupcion = 'Ejecución interrumpida porque el backend se reinició o perdió el proceso Playwright.';
+    const finalizadaEn = new Date().toISOString();
     await this.aprendizajes.updateMany(
       filtro,
       {
         $set: {
           'ultima_ejecucion.estado': 'rojo',
-          'ultima_ejecucion.finalizada_en': new Date().toISOString(),
-          'ultima_ejecucion.detalle': 'Ejecución interrumpida porque el backend se reinició o perdió el proceso Playwright.',
+          'ultima_ejecucion.finalizada_en': finalizadaEn,
+          'ultima_ejecucion.detalle': detalleInterrupcion,
           'ultima_ejecucion.exit_code': null,
         },
       },
     );
+
+    const filtroHistorial: Record<string, unknown> = { estado: 'corriendo' };
+    if (idsActivos.length > 0) filtroHistorial['aprendizaje_id'] = { $nin: idsActivos };
+    await this.ejecucionesHistorial?.updateMany(
+      filtroHistorial,
+      { $set: { estado: 'rojo', finalizada_en: finalizadaEn, detalle: detalleInterrupcion, exit_code: null } },
+    ).catch(() => undefined);
   }
 
   /**
@@ -644,6 +707,10 @@ export class QaSopLoomService {
       entrada.pasos,
       entrada.consideracionesDecididas ?? [],
     );
+    // El recorrido sale del texto completo del SOP (descripcion + pasos), no de
+    // la ruta inspeccionada: es lo que deja ver que un flujo nombra mas de una
+    // pantalla aunque el plan todavia compile una sola.
+    const mencionadas = pantallasMencionadas(this.textoDelSop(entrada.descripcion, entrada.pasos));
     const vacia: Compilacion = {
       pantalla: null,
       campos: [],
@@ -653,6 +720,7 @@ export class QaSopLoomService {
       consideraciones: guardas.consideraciones,
       pendientes: [],
       inspeccion: entrada.inspeccion,
+      recorrido: await this.recorridoDePantallas(mencionadas, null, 0, 0),
     };
 
     if (!entrada.ruta) {
@@ -853,6 +921,15 @@ export class QaSopLoomService {
       },
     }));
 
+    const recorrido = await this.recorridoDePantallas(
+      mencionadas,
+      pantalla,
+      pasosOrdenados.length,
+      campos.length,
+      inspeccion.id,
+    );
+    pendientes.push(...this.pendientesDeRecorrido(recorrido));
+
     return {
       pantalla,
       campos,
@@ -862,7 +939,73 @@ export class QaSopLoomService {
       consideraciones: guardas.consideraciones,
       pendientes,
       inspeccion,
+      recorrido,
     };
+  }
+
+  /** Texto completo del SOP: la descripcion mas la prosa de cada paso. */
+  private textoDelSop(descripcion: string, pasos: Record<string, unknown>[]): string {
+    return [
+      descripcion,
+      ...pasos.map((paso) => this.texto(paso['accion'] ?? paso['texto'] ?? paso['nombre'])),
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  /**
+   * Arma el recorrido de pantallas del flujo. La pantalla que el plan compila
+   * va primera aunque el texto no la nombre (puede venir de la ruta elegida a
+   * mano) y queda marcada como cubierta; el resto son pantallas que el SOP
+   * nombra pero que todavia no se automatizan.
+   */
+  private async recorridoDePantallas(
+    mencionadas: Array<{ pantalla: PantallaCatalogo }>,
+    compilada: PantallaCatalogo | null,
+    pasos: number,
+    campos: number,
+    inspeccionIdCompilada = '',
+  ): Promise<PantallaRecorrida[]> {
+    const rutaCompilada = compilada ? this.normalizarRuta(compilada.ruta) : '';
+    const pantallas = mencionadas.map((item) => item.pantalla);
+    if (compilada && !pantallas.some((item) => this.normalizarRuta(item.ruta) === rutaCompilada)) {
+      pantallas.unshift(compilada);
+    }
+
+    return Promise.all(pantallas.map(async (pantalla, indice) => {
+      const cubierta = rutaCompilada !== '' && this.normalizarRuta(pantalla.ruta) === rutaCompilada;
+      // La pantalla que el plan cubre ya trae su propia inspección recién
+      // resuelta; el resto, si alguna vez se inspeccionó, presta prestada la
+      // última foto que quedó en disco. Sin ninguna de las dos, no hay imagen.
+      const inspeccionId = cubierta
+        ? inspeccionIdCompilada
+        : (await this.inspector?.ultimaConCaptura(pantalla.ruta).catch(() => null)) ?? '';
+      return {
+        orden: indice + 1,
+        codigo: pantalla.codigo,
+        ruta: pantalla.ruta,
+        nombre: pantalla.nombre,
+        instrumentada: pantalla.instrumentada,
+        cubierta,
+        pasos: cubierta ? pasos : 0,
+        campos: cubierta ? campos : 0,
+        inspeccion_id: inspeccionId,
+      };
+    }));
+  }
+
+  /**
+   * Una pantalla nombrada que el plan no cubre no es un error del SOP: es un
+   * limite del motor, que hoy compila una sola pantalla por flujo. Se avisa
+   * para que nadie asuma que el salto entre pantallas ya se automatiza.
+   */
+  private pendientesDeRecorrido(recorrido: PantallaRecorrida[]): string[] {
+    const cubierta = recorrido.find((pantalla) => pantalla.cubierta);
+    return recorrido
+      .filter((pantalla) => !pantalla.cubierta)
+      .map((pantalla) => (pantalla.instrumentada
+        ? `El SOP también nombra ${pantalla.nombre} (${pantalla.ruta}), pero el plan ejecutable cubre una sola pantalla${cubierta ? ` (${cubierta.nombre})` : ''}. El salto entre pantallas todavía no se automatiza.`
+        : `El SOP nombra ${pantalla.nombre} (${pantalla.ruta}), que todavía no expone data-testid. Hay que instrumentarla antes de poder automatizarla.`));
   }
 
   /**
@@ -1320,6 +1463,9 @@ export class QaSopLoomService {
         login: '/login',
         // La pantalla objetivo es la que el SOP describe, no la de SOP Loom.
         pantalla_objetivo: pantalla?.ruta ?? base.ruta,
+        // Todas las pantallas que el SOP nombra, en orden. Hoy solo una queda
+        // `cubierta` por el plan; el resto avisa que el salto no se automatiza.
+        recorrido: compilacion.recorrido,
       },
       selectores: {
         ...(pantalla?.selectores ?? {}),

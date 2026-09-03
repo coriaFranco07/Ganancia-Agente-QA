@@ -86,10 +86,15 @@ export class QaSuiteRunnerService {
     return previa;
   }
 
-  /** Lista los aprendizajes aprobados: son los unicos elegibles para la Suite. */
+  /**
+   * Lista los aprendizajes elegibles para la Suite: no hace falta que esten
+   * aprobados, alcanza con que ya esten cargados y compilados (tengan
+   * definicion ejecutable). Los que ademas estan aprobados conservan, al
+   * correr, la verificacion de que no cambiaron desde la aprobacion.
+   */
   async listarAprendizajesAprobados(): Promise<Record<string, unknown>[]> {
     const docs = await this.aprendizajes
-      .find({ estado: 'aprobado', activo: { $ne: false } })
+      .find({ activo: { $ne: false }, definicion_ejecutable: { $ne: null } })
       .sort({ nombre: 1 })
       .lean<QaSopLoomLean[]>();
     return docs.map((doc) => ({
@@ -97,6 +102,7 @@ export class QaSuiteRunnerService {
       nombre: doc.nombre,
       modulo: doc.modulo,
       ruta: doc.ruta,
+      estado: doc.estado,
       firmas: doc.firmas ?? { negocio: null, tecnica: null },
       ultima_corrida: null,
     }));
@@ -148,9 +154,11 @@ export class QaSuiteRunnerService {
   }
 
   /**
-   * Valida el gate heredado de SOP Loom (aprobado + hashes vigentes) y
-   * spawnea el script de la categoria. A diferencia de la ejecucion propia de
-   * SOP Loom, nunca revalida casos congelados: la Suite no los usa.
+   * No exige que el aprendizaje este aprobado: alcanza con que este cargado
+   * y compilado. A los que si estan aprobados les mantiene la verificacion
+   * de que la definicion y la navegacion no cambiaron desde la aprobacion.
+   * A diferencia de la ejecucion propia de SOP Loom, nunca revalida casos
+   * congelados: la Suite no los usa.
    */
   private async iniciarEjecucion(
     aprendizajeId: string,
@@ -160,18 +168,20 @@ export class QaSuiteRunnerService {
   ): Promise<QaSuiteEjecucionLean> {
     const doc = await this.aprendizajes.findOne({ id: aprendizajeId, activo: { $ne: false } }).lean<QaSopLoomLean>();
     if (!doc) throw new NotFoundException(`Aprendizaje ${aprendizajeId} inexistente.`);
-    if (doc.estado !== 'aprobado') {
-      throw new BadRequestException(`El aprendizaje ${aprendizajeId} debe estar aprobado antes de correr la Suite.`);
+    if (!doc.definicion_ejecutable) {
+      throw new BadRequestException(`El aprendizaje ${aprendizajeId} todavía no tiene una definición compilada.`);
     }
 
-    const aprobacion = this.objeto(doc.aprobacion);
-    const hashDefinicion = this.hash(this.objeto(doc.definicion_ejecutable));
-    if (this.texto(aprobacion['hash_definicion']) !== hashDefinicion) {
-      throw new BadRequestException(`La definición de ${aprendizajeId} cambió después de aprobarse. Volvé a revisarla y aprobarla.`);
-    }
-    const inspeccionAprobada = this.objeto(doc.inspeccion_navegacion);
-    if (this.texto(aprobacion['hash_navegacion']) !== this.texto(inspeccionAprobada['hash'])) {
-      throw new BadRequestException(`La inspección navegada de ${aprendizajeId} no coincide con la aprobación técnica vigente.`);
+    if (doc.estado === 'aprobado') {
+      const aprobacion = this.objeto(doc.aprobacion);
+      const hashDefinicion = this.hash(this.objeto(doc.definicion_ejecutable));
+      if (this.texto(aprobacion['hash_definicion']) !== hashDefinicion) {
+        throw new BadRequestException(`La definición de ${aprendizajeId} cambió después de aprobarse. Volvé a revisarla y aprobarla.`);
+      }
+      const inspeccionAprobada = this.objeto(doc.inspeccion_navegacion);
+      if (this.texto(aprobacion['hash_navegacion']) !== this.texto(inspeccionAprobada['hash'])) {
+        throw new BadRequestException(`La inspección navegada de ${aprendizajeId} no coincide con la aprobación técnica vigente.`);
+      }
     }
 
     const clave = `${aprendizajeId}:${categoria}`;

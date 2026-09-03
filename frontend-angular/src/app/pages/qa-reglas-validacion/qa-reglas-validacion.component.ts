@@ -547,8 +547,8 @@ export class QaReglasValidacionComponent implements OnInit {
   /**
    * "Todas las pantallas" arma una unica lista (la regla es global, no tiene
    * sentido separarla por pantalla). Pantallas puntuales arman un grupo por
-   * cada una, con su propia copia de cada campo: CUIL en Pantalla 1 se
-   * configura aparte de CUIL en Pantalla 3.
+   * cada una, con su propia copia de cada campo: CUIL en Legajo de Ganancias
+   * se configura aparte de CUIL en Legajo de Cliente.
    */
   siguiente(): void {
     if (!this.puedeAvanzar) return;

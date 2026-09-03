@@ -59,6 +59,30 @@ interface PasoEjecutable {
   escribe: boolean;
 }
 
+/**
+ * Pantalla que el SOP nombra, en el orden en que la nombra. `cubierta` marca la
+ * que el plan ejecutable opera de verdad: el resto todavía no se automatiza.
+ */
+interface PantallaRecorrida {
+  orden: number;
+  codigo: string;
+  ruta: string;
+  nombre: string;
+  instrumentada: boolean;
+  cubierta: boolean;
+  pasos: number;
+  campos: number;
+  /** Id de inspección para pedir la foto de esta pantalla; '' si no hay ninguna guardada. */
+  inspeccionId: string;
+}
+
+/** Foto de una pantalla abierta en grande, con navegación entre las del recorrido. */
+interface CapturaAbierta {
+  indice: number;
+  nombre: string;
+  url: string;
+}
+
 /** Caso QA real (cargado a mano o por Excel) con el que el agente va a operar. */
 interface CasoAEjecutar {
   id: string;
@@ -136,137 +160,157 @@ interface PantallaAprendida {
         </div>
       </section>
 
-      <section class="loom-grid">
-        <form class="panel capture-panel" data-testid="qa-sop-loom-form" (submit)="$event.preventDefault(); aprenderFlujo()">
-          <div class="panel-title">
+      <form class="panel capture-panel" data-testid="qa-sop-loom-form" (submit)="$event.preventDefault(); aprenderFlujo()">
+        <div class="panel-title">
+          <div>
+            <span class="kicker">Entrada</span>
+            <h2>Texto de Loom</h2>
+          </div>
+          <span class="state-chip" [ngClass]="resultado?.estado || 'borrador'">{{ estadoTexto(resultado?.estado || 'borrador') }}</span>
+        </div>
+
+        <label class="loom-text">
+          <span>Descripción o transcripción</span>
+          <textarea
+            [(ngModel)]="form.descripcionVideo"
+            name="descripcionVideo"
+            rows="10"
+            data-testid="qa-sop-loom-text-input"
+            placeholder="Pegá acá todo el texto que entrega Loom. Ejemplo: ingreso a QA, abro Pantalla 3, completo el campo legajo, selecciono dataset y guardo el caso."></textarea>
+        </label>
+
+        <div *ngIf="mensaje" class="message" data-testid="qa-sop-loom-message" [class.error]="mensajeError">{{ mensaje }}</div>
+
+        <div class="actions">
+          <button
+            mat-stroked-button
+            type="button"
+            data-testid="qa-sop-loom-inspect-button"
+            [disabled]="!resultado?.ruta || inspeccionando"
+            (click)="inspeccionarPantalla()">
+            <mat-icon>travel_explore</mat-icon>
+            {{ inspeccionando ? 'Inspeccionando...' : 'Inspeccionar pantalla' }}
+          </button>
+          <button mat-stroked-button type="button" data-testid="qa-sop-loom-save-button" [disabled]="!resultado?.inspeccionNavegacion || guardando" (click)="guardarAprendizaje()">
+            <mat-icon>save</mat-icon>
+            {{ guardando ? 'Guardando...' : 'Guardar flujo' }}
+          </button>
+          <button mat-flat-button color="primary" type="submit" data-testid="qa-sop-loom-learn-button">
+            <mat-icon>school</mat-icon>
+            Analizar texto
+          </button>
+        </div>
+      </form>
+
+      <ng-container *ngIf="resultado as aprendido; else sinResultado">
+        <section class="panel result-head-panel" data-testid="qa-sop-loom-result">
+          <div class="result-head">
             <div>
-              <span class="kicker">Entrada</span>
-              <h2>Texto de Loom</h2>
+              <span class="kicker">Flujo detectado</span>
+              <h2>{{ aprendido.nombre }}</h2>
+              <p>{{ aprendido.ruta || 'Ruta pendiente' }}</p>
             </div>
-            <span class="state-chip" [ngClass]="resultado?.estado || 'borrador'">{{ estadoTexto(resultado?.estado || 'borrador') }}</span>
+            <span class="state-chip" [ngClass]="aprendido.estado">{{ estadoTexto(aprendido.estado) }}</span>
           </div>
+        </section>
 
-          <label class="loom-text">
-            <span>Descripción o transcripción</span>
-            <textarea
-              [(ngModel)]="form.descripcionVideo"
-              name="descripcionVideo"
-              rows="18"
-              data-testid="qa-sop-loom-text-input"
-              placeholder="Pegá acá todo el texto que entrega Loom. Ejemplo: ingreso a QA, abro Pantalla 3, completo el campo legajo, selecciono dataset y guardo el caso."></textarea>
-          </label>
+        <div class="result-accordion" *ngIf="aprendido.pendientes.length > 0">
+          <mat-expansion-panel expanded data-testid="qa-sop-loom-pendientes">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Pendientes</mat-panel-title>
+              <mat-panel-description>{{ aprendido.pendientes.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <ul>
+              <li *ngFor="let pendiente of aprendido.pendientes; trackBy: trackByTexto">{{ pendiente }}</li>
+            </ul>
+          </mat-expansion-panel>
+        </div>
 
-          <div *ngIf="mensaje" class="message" data-testid="qa-sop-loom-message" [class.error]="mensajeError">{{ mensaje }}</div>
-
-          <div class="actions">
-            <button
-              mat-stroked-button
-              type="button"
-              data-testid="qa-sop-loom-inspect-button"
-              [disabled]="!resultado?.ruta || inspeccionando"
-              (click)="inspeccionarPantalla()">
-              <mat-icon>travel_explore</mat-icon>
-              {{ inspeccionando ? 'Inspeccionando...' : 'Inspeccionar pantalla' }}
-            </button>
-            <button mat-stroked-button type="button" data-testid="qa-sop-loom-save-button" [disabled]="!resultado?.inspeccionNavegacion || guardando" (click)="guardarAprendizaje()">
-              <mat-icon>save</mat-icon>
-              {{ guardando ? 'Guardando...' : 'Guardar flujo' }}
-            </button>
-            <button mat-flat-button color="primary" type="submit" data-testid="qa-sop-loom-learn-button">
-              <mat-icon>school</mat-icon>
-              Analizar texto
-            </button>
-          </div>
-        </form>
-
-        <aside class="panel result-panel" data-testid="qa-sop-loom-result">
-          <ng-container *ngIf="resultado as aprendido; else sinResultado">
-            <div class="result-head">
-              <div>
-                <span class="kicker">Flujo detectado</span>
-                <h2>{{ aprendido.nombre }}</h2>
-                <p>{{ aprendido.ruta || 'Ruta pendiente' }}</p>
-              </div>
-              <span class="state-chip" [ngClass]="aprendido.estado">{{ estadoTexto(aprendido.estado) }}</span>
-            </div>
-
-            <div class="summary-grid">
-              <article>
-                <span>Módulo</span>
-                <strong>{{ aprendido.modulo }}</strong>
-              </article>
-              <article>
-                <span>Rol</span>
-                <strong>{{ aprendido.rol }}</strong>
-              </article>
-              <article>
-                <span>Entorno</span>
-                <strong>{{ aprendido.entorno }}</strong>
-              </article>
-            </div>
-
-            <div class="metric-grid">
-              <article>
-                <strong>{{ aprendido.pasos.length }}</strong>
-                <span>Pasos</span>
-              </article>
-              <article>
-                <strong>{{ aprendido.campos.length }}</strong>
-                <span>Campos</span>
-              </article>
-              <article>
-                <strong>{{ aprendido.pendientes.length }}</strong>
-                <span>Pendientes</span>
-              </article>
-            </div>
-
-            <mat-accordion multi class="result-accordion" data-testid="qa-sop-loom-accordion">
-              <mat-expansion-panel *ngIf="aprendido.pendientes.length > 0" expanded data-testid="qa-sop-loom-pendientes">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Pendientes</mat-panel-title>
-                  <mat-panel-description>{{ aprendido.pendientes.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <ul>
-                  <li *ngFor="let pendiente of aprendido.pendientes; trackBy: trackByTexto">{{ pendiente }}</li>
-                </ul>
-              </mat-expansion-panel>
-
-              <mat-expansion-panel data-testid="qa-sop-loom-pasos">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Pasos aprendidos</mat-panel-title>
-                  <mat-panel-description>{{ aprendido.pasos.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <div class="steps">
-                  <article *ngFor="let paso of aprendido.pasos; trackBy: trackByPaso" class="step-card" [attr.data-testid]="'qa-sop-loom-step-' + paso.orden">
-                    <b>{{ paso.orden }}</b>
-                    <div>
-                      <strong>{{ paso.accion }}</strong>
-                      <span>{{ paso.ruta }} · {{ aprendido.inspeccionNavegacion ? 'resuelto por navegación' : paso.selectorSugerido }}</span>
-                    </div>
-                  </article>
+        <div class="result-accordion">
+          <mat-expansion-panel data-testid="qa-sop-loom-pasos">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Pasos aprendidos</mat-panel-title>
+              <mat-panel-description>{{ aprendido.pasos.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <div class="steps">
+              <article *ngFor="let paso of aprendido.pasos; trackBy: trackByPaso" class="step-card" [attr.data-testid]="'qa-sop-loom-step-' + paso.orden">
+                <b>{{ paso.orden }}</b>
+                <div>
+                  <strong>{{ paso.accion }}</strong>
+                  <span>{{ paso.ruta }} · {{ aprendido.inspeccionNavegacion ? 'resuelto por navegación' : paso.selectorSugerido }}</span>
                 </div>
-              </mat-expansion-panel>
+              </article>
+            </div>
+          </mat-expansion-panel>
+        </div>
 
-              <mat-expansion-panel *ngIf="aprendido.campos.length > 0" data-testid="qa-sop-loom-campos">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Campos detectados</mat-panel-title>
-                  <mat-panel-description>{{ aprendido.campos.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <div class="field-grid">
-                  <article *ngFor="let campo of aprendido.campos; trackBy: trackByCampo" class="field-card">
-                    <div class="field-card-head">
-                      <strong>{{ campo.etiqueta }}</strong>
-                      <span class="tipo-pill" [class.obligatorio]="campo.obligatorio">
-                        {{ campo.obligatorio ? 'Obligatorio' : 'Opcional' }}
-                      </span>
-                    </div>
-                    <code class="testid-chip" *ngIf="campo.testid">{{ campo.testid }}</code>
-                    <span class="field-card-tipo">{{ campo.tipo }}</span>
-                  </article>
+        <div class="result-accordion" *ngIf="pantallasDelFlujo.length > 0">
+          <mat-expansion-panel expanded data-testid="qa-sop-loom-pantallas">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Pantallas del flujo</mat-panel-title>
+              <mat-panel-description>{{ pantallasDelFlujo.length }} pantalla(s)</mat-panel-description>
+            </mat-expansion-panel-header>
+            <p class="block-hint">
+              Pantallas que nombra el SOP, en el orden en que las nombra. Tocá una foto para agrandarla.
+              Solo la que está en el plan se automatiza hoy: el salto de una pantalla a otra todavía no se ejecuta.
+            </p>
+            <div class="plan-path">
+              <article
+                *ngFor="let pantalla of pantallasDelFlujo; trackBy: trackByPantalla; let last = last"
+                class="plan-node screen-node"
+                [class.pending]="!pantalla.cubierta"
+                [class.last]="last"
+                [attr.data-testid]="'qa-sop-loom-pantalla-' + pantalla.orden">
+                <button
+                  type="button"
+                  class="screen-thumb"
+                  [disabled]="!pantalla.inspeccionId"
+                  [attr.data-testid]="'qa-sop-loom-pantalla-foto-' + pantalla.orden"
+                  (click)="abrirCaptura(pantalla)">
+                  <img *ngIf="pantalla.inspeccionId" [src]="capturaUrl(pantalla)" [alt]="pantalla.nombre" loading="lazy">
+                  <span class="screen-thumb-empty" *ngIf="!pantalla.inspeccionId">
+                    <mat-icon>hourglass_empty</mat-icon>
+                    Sin foto todavía
+                  </span>
+                  <span class="screen-thumb-zoom" *ngIf="pantalla.inspeccionId"><mat-icon>zoom_in</mat-icon></span>
+                </button>
+                <div class="plan-node-top">
+                  <span class="plan-node-badge">{{ pantalla.orden }}</span>
+                  <strong class="plan-node-title">{{ pantalla.nombre }}</strong>
                 </div>
-              </mat-expansion-panel>
+                <span class="plan-node-meta">{{ pantalla.ruta }}</span>
+                <span class="plan-node-chip">
+                  {{ estadoPantalla(pantalla) }}
+                  <ng-container *ngIf="pantalla.cubierta"> · {{ pantalla.pasos }} paso(s)</ng-container>
+                </span>
+              </article>
+            </div>
+          </mat-expansion-panel>
+        </div>
 
-              <mat-expansion-panel *ngIf="planEjecutable.length > 0" expanded data-testid="qa-sop-loom-plan">
+        <div class="result-accordion" *ngIf="aprendido.campos.length > 0">
+          <mat-expansion-panel data-testid="qa-sop-loom-campos">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Campos detectados</mat-panel-title>
+              <mat-panel-description>{{ aprendido.campos.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <div class="field-grid">
+              <article *ngFor="let campo of aprendido.campos; trackBy: trackByCampo" class="field-card">
+                <div class="field-card-head">
+                  <strong>{{ campo.etiqueta }}</strong>
+                  <span class="tipo-pill" [class.obligatorio]="campo.obligatorio">
+                    {{ campo.obligatorio ? 'Obligatorio' : 'Opcional' }}
+                  </span>
+                </div>
+                <code class="testid-chip" *ngIf="campo.testid">{{ campo.testid }}</code>
+                <span class="field-card-tipo">{{ campo.tipo }}</span>
+              </article>
+            </div>
+          </mat-expansion-panel>
+        </div>
+
+        <div class="result-accordion" *ngIf="planEjecutable.length > 0">
+          <mat-expansion-panel expanded data-testid="qa-sop-loom-plan">
                 <mat-expansion-panel-header>
                   <mat-panel-title>Plan ejecutable · {{ pantallaObjetivo }}</mat-panel-title>
                   <mat-panel-description>{{ planEjecutable.length }} paso(s)</mat-panel-description>
@@ -276,102 +320,117 @@ interface PantallaAprendida {
                   Los pasos de completar campos (<mat-icon class="inline-icon">drag_indicator</mat-icon>) se pueden
                   arrastrar para cambiar el orden en que el agente los carga.
                 </p>
-                <p class="block-hint order-hint" *ngIf="ordenSinGuardar" data-testid="qa-sop-loom-orden-sin-guardar">
-                  <mat-icon>info</mat-icon>
-                  Cambiaste el orden: tocá "Guardar flujo" para que el agente lo use.
-                </p>
-                <div class="steps" cdkDropList (cdkDropListDropped)="onDropPlan($event)">
+                <div class="order-hint" *ngIf="ordenSinGuardar" data-testid="qa-sop-loom-orden-sin-guardar">
+                  <span>
+                    <mat-icon>info</mat-icon>
+                    Cambiaste el orden: guardá para que el agente lo use.
+                  </span>
+                  <button mat-flat-button color="primary" type="button" data-testid="qa-sop-loom-save-button-plan" [disabled]="guardando" (click)="guardarAprendizaje()">
+                    <mat-icon>save</mat-icon>
+                    {{ guardando ? 'Guardando...' : 'Guardar flujo' }}
+                  </button>
+                </div>
+                <div class="plan-path" cdkDropList cdkDropListOrientation="horizontal" (cdkDropListDropped)="onDropPlan($event)">
                   <article
-                    *ngFor="let paso of planEjecutable; trackBy: trackByPlan"
-                    class="step-card plan-card"
+                    *ngFor="let paso of planEjecutable; trackBy: trackByPlan; let last = last"
+                    class="plan-node"
                     [class.writes]="paso.escribe"
                     [class.draggable]="paso.tipo === 'completar'"
+                    [class.last]="last"
                     cdkDrag
                     [cdkDragDisabled]="paso.tipo !== 'completar'"
                     [attr.data-testid]="'qa-sop-loom-plan-' + paso.orden">
                     <mat-icon *ngIf="paso.tipo === 'completar'" class="drag-handle" cdkDragHandle title="Arrastrar para reordenar">drag_indicator</mat-icon>
-                    <b>{{ paso.orden }}</b>
-                    <div>
-                      <strong>{{ paso.nombre }}<em *ngIf="paso.escribe"> · escribe</em></strong>
-                      <span>
-                        {{ paso.selector || paso.tipo }}
-                        <ng-container *ngIf="paso.campo"> ← caso.{{ paso.campo }}</ng-container>
-                      </span>
+                    <div class="plan-node-top">
+                      <span class="plan-node-badge">{{ paso.orden }}</span>
+                      <span class="plan-node-icon"><mat-icon>{{ iconoPaso(paso) }}</mat-icon></span>
                     </div>
+                    <strong class="plan-node-title">
+                      {{ paso.nombre }}
+                      <em *ngIf="paso.escribe">escribe</em>
+                    </strong>
+                    <span class="plan-node-meta">
+                      {{ paso.selector || paso.tipo }}
+                      <ng-container *ngIf="paso.campo"> → caso.{{ paso.campo }}</ng-container>
+                    </span>
                   </article>
                 </div>
               </mat-expansion-panel>
+            </div>
 
-              <mat-expansion-panel data-testid="qa-sop-loom-casos">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Casos que va a ejecutar</mat-panel-title>
-                  <mat-panel-description>{{ casosAEjecutar.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <p class="block-hint">
-                  Salen de los casos cargados en Pantalla 3, a mano o por importación de Excel.
-                  El sistema no inventa datos de prueba.
-                </p>
-                <div *ngIf="casosAEjecutar.length === 0" class="empty-row">
-                  <mat-icon>inventory_2</mat-icon>
-                  <span>Sin casos. Cargá al menos uno en Pantalla 3 y volvé a guardar el flujo.</span>
-                </div>
-                <div class="field-grid" *ngIf="casosAEjecutar.length > 0">
-                  <article
-                    *ngFor="let caso of casosAEjecutar; trackBy: trackByCaso"
-                    class="field-card"
-                    [attr.data-testid]="'qa-sop-loom-caso-' + caso.id">
-                    <strong>{{ caso.id }}</strong>
-                    <span>{{ caso.resumen }}</span>
-                  </article>
-                </div>
-              </mat-expansion-panel>
+        <div class="result-accordion">
+          <mat-expansion-panel data-testid="qa-sop-loom-casos">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Casos que va a ejecutar</mat-panel-title>
+              <mat-panel-description>{{ casosAEjecutar.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <p class="block-hint">
+              Salen de los casos cargados en Pantalla 3, a mano o por importación de Excel.
+              El sistema no inventa datos de prueba.
+            </p>
+            <div *ngIf="casosAEjecutar.length === 0" class="empty-row">
+              <mat-icon>inventory_2</mat-icon>
+              <span>Sin casos. Cargá al menos uno en Pantalla 3 y volvé a guardar el flujo.</span>
+            </div>
+            <div class="field-grid" *ngIf="casosAEjecutar.length > 0">
+              <article
+                *ngFor="let caso of casosAEjecutar; trackBy: trackByCaso"
+                class="field-card"
+                [attr.data-testid]="'qa-sop-loom-caso-' + caso.id">
+                <strong>{{ caso.id }}</strong>
+                <span>{{ caso.resumen }}</span>
+              </article>
+            </div>
+          </mat-expansion-panel>
+        </div>
 
-              <mat-expansion-panel *ngIf="guardas.length > 0" expanded data-testid="qa-sop-loom-guardas">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>Guardas del SOP</mat-panel-title>
-                  <mat-panel-description>{{ guardas.length }}</mat-panel-description>
-                </mat-expansion-panel-header>
-                <p class="block-hint">
-                  El agente no decide si una precaución escrita en lenguaje humano es una regla
-                  evaluable o un juicio del operador. Resolvé cada una para poder firmar.
-                </p>
-                <div class="guard-list">
-                  <article
-                    *ngFor="let guarda of guardas; trackBy: trackByGuarda"
-                    class="guard-card"
-                    [class.pending]="guarda.control === 'sin_definir'"
-                    [class.human]="guarda.control === 'humano'"
-                    [attr.data-testid]="'qa-sop-loom-guarda-' + guarda.id">
-                    <strong>{{ guarda.texto }}</strong>
-                    <div class="guard-actions">
-                      <button
-                        mat-stroked-button
-                        type="button"
-                        [class.chosen]="guarda.testeable === true"
-                        [attr.data-testid]="'qa-sop-loom-guarda-testeable-' + guarda.id"
-                        (click)="decidirGuarda(guarda, true)">
-                        El test la verifica
-                      </button>
-                      <button
-                        mat-stroked-button
-                        type="button"
-                        [class.chosen]="guarda.testeable === false"
-                        [attr.data-testid]="'qa-sop-loom-guarda-humana-' + guarda.id"
-                        (click)="decidirGuarda(guarda, false)">
-                        Control humano
-                      </button>
-                    </div>
-                  </article>
+        <div class="result-accordion" *ngIf="guardas.length > 0">
+          <mat-expansion-panel expanded data-testid="qa-sop-loom-guardas">
+            <mat-expansion-panel-header>
+              <mat-panel-title>Guardas del SOP</mat-panel-title>
+              <mat-panel-description>{{ guardas.length }}</mat-panel-description>
+            </mat-expansion-panel-header>
+            <p class="block-hint">
+              El agente no decide si una precaución escrita en lenguaje humano es una regla
+              evaluable o un juicio del operador. Resolvé cada una para poder firmar.
+            </p>
+            <div class="guard-list">
+              <article
+                *ngFor="let guarda of guardas; trackBy: trackByGuarda"
+                class="guard-card"
+                [class.pending]="guarda.control === 'sin_definir'"
+                [class.human]="guarda.control === 'humano'"
+                [attr.data-testid]="'qa-sop-loom-guarda-' + guarda.id">
+                <strong>{{ guarda.texto }}</strong>
+                <div class="guard-actions">
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [class.chosen]="guarda.testeable === true"
+                    [attr.data-testid]="'qa-sop-loom-guarda-testeable-' + guarda.id"
+                    (click)="decidirGuarda(guarda, true)">
+                    El test la verifica
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [class.chosen]="guarda.testeable === false"
+                    [attr.data-testid]="'qa-sop-loom-guarda-humana-' + guarda.id"
+                    (click)="decidirGuarda(guarda, false)">
+                    Control humano
+                  </button>
                 </div>
-                <p class="block-hint" *ngIf="requiereControlHumano" data-testid="qa-sop-loom-control-humano">
-                  Este flujo queda marcado como <strong>no apto para automatización desatendida</strong>:
-                  hay al menos una guarda que depende del criterio de una persona.
-                </p>
-              </mat-expansion-panel>
-            </mat-accordion>
+              </article>
+            </div>
+            <p class="block-hint" *ngIf="requiereControlHumano" data-testid="qa-sop-loom-control-humano">
+              Este flujo queda marcado como <strong>no apto para automatización desatendida</strong>:
+              hay al menos una guarda que depende del criterio de una persona.
+            </p>
+          </mat-expansion-panel>
+        </div>
 
-            <div class="run-actions" *ngIf="aprendido.id">
-              <button
+        <div class="run-actions" *ngIf="aprendido.id">
+          <button
                 mat-stroked-button
                 type="button"
                 data-testid="qa-sop-loom-sign-tecnica-button"
@@ -399,38 +458,36 @@ interface PantallaAprendida {
                 <mat-icon>play_arrow</mat-icon>
                 {{ ejecutando ? 'Ejecutando...' : 'Ejecutar agente' }}
               </button>
-            </div>
+        </div>
 
-            <section class="approval-summary" *ngIf="firmas.tecnica || firmas.negocio" data-testid="qa-sop-loom-approval-summary">
-              <mat-icon>verified_user</mat-icon>
-              <div>
-                <strong>
-                  {{ aprendido.estado === 'aprobado' ? 'Aprobado con las dos firmas' : 'Falta una firma para aprobar' }}
-                </strong>
-                <span *ngIf="firmas.tecnica as tecnica">
-                  Técnica: {{ tecnica.por }} · {{ tecnica.en | date:'dd/MM/yy HH:mm' }}
-                </span>
-                <span *ngIf="firmas.negocio as negocio">
-                  Negocio: {{ negocio.por }} · {{ negocio.en | date:'dd/MM/yy HH:mm' }}
-                </span>
-              </div>
-            </section>
+        <section class="panel approval-summary" *ngIf="firmas.tecnica || firmas.negocio" data-testid="qa-sop-loom-approval-summary">
+          <mat-icon>verified_user</mat-icon>
+          <div>
+            <strong>
+              {{ aprendido.estado === 'aprobado' ? 'Aprobado con las dos firmas' : 'Falta una firma para aprobar' }}
+            </strong>
+            <span *ngIf="firmas.tecnica as tecnica">
+              Técnica: {{ tecnica.por }} · {{ tecnica.en | date:'dd/MM/yy HH:mm' }}
+            </span>
+            <span *ngIf="firmas.negocio as negocio">
+              Negocio: {{ negocio.por }} · {{ negocio.en | date:'dd/MM/yy HH:mm' }}
+            </span>
+          </div>
+        </section>
 
-            <section class="result-block" *ngIf="ultimaEjecucionTexto">
-              <h3>Última ejecución</h3>
-              <p class="block-hint" data-testid="qa-sop-loom-last-run">{{ ultimaEjecucionTexto }}</p>
-            </section>
-          </ng-container>
+        <section class="panel result-block" *ngIf="ultimaEjecucionTexto">
+          <h3>Última ejecución</h3>
+          <p class="block-hint" data-testid="qa-sop-loom-last-run">{{ ultimaEjecucionTexto }}</p>
+        </section>
+      </ng-container>
 
-          <ng-template #sinResultado>
-            <div class="empty-state">
-              <mat-icon>smart_toy</mat-icon>
-              <strong>Sin flujo aprendido</strong>
-              <span>Pegá el texto de Loom y tocá Analizar texto.</span>
-            </div>
-          </ng-template>
-        </aside>
-      </section>
+      <ng-template #sinResultado>
+        <div class="empty-state">
+          <mat-icon>smart_toy</mat-icon>
+          <strong>Sin flujo aprendido</strong>
+          <span>Pegá el texto de Loom y tocá Analizar texto.</span>
+        </div>
+      </ng-template>
 
       <section class="panel learned-panel" data-testid="qa-sop-loom-learned-panel">
         <div class="panel-title">
@@ -468,6 +525,57 @@ interface PantallaAprendida {
             </button>
           </article>
         </div>
+      </section>
+
+      <section
+        *ngIf="capturaAbierta as captura"
+        class="captura-modal"
+        data-testid="qa-sop-loom-images-modal"
+        role="dialog"
+        aria-modal="true"
+        (click)="cerrarCaptura()">
+        <article class="captura-modal-card" (click)="$event.stopPropagation()">
+          <header>
+            <div>
+              <span>Foto de la pantalla</span>
+              <strong>{{ captura.nombre }}</strong>
+            </div>
+            <button mat-icon-button type="button" data-testid="qa-sop-loom-images-close" (click)="cerrarCaptura()">
+              <mat-icon>close</mat-icon>
+            </button>
+          </header>
+          <div class="captura-modal-body">
+            <button
+              mat-icon-button
+              type="button"
+              class="captura-nav prev"
+              data-testid="qa-sop-loom-images-prev"
+              [disabled]="!puedeMoverCaptura()"
+              (click)="moverCaptura(-1)">
+              <mat-icon>chevron_left</mat-icon>
+            </button>
+            <img
+              *ngIf="!capturaConError"
+              [src]="captura.url"
+              [alt]="captura.nombre"
+              (error)="capturaConError = true"
+              (load)="capturaConError = false">
+            <div class="captura-error" *ngIf="capturaConError">
+              <mat-icon>broken_image</mat-icon>
+              <span>No se pudo cargar la foto. Puede que la captura ya no exista en disco.</span>
+            </div>
+            <button
+              mat-icon-button
+              type="button"
+              class="captura-nav next"
+              data-testid="qa-sop-loom-images-next"
+              [disabled]="!puedeMoverCaptura()"
+              (click)="moverCaptura(1)">
+              <mat-icon>chevron_right</mat-icon>
+            </button>
+          </div>
+          <footer>{{ captura.indice + 1 }} de {{ totalCapturas() }}</footer>
+        </article>
       </section>
     </main>
   `,
@@ -561,13 +669,6 @@ interface PantallaAprendida {
       height: 18px;
     }
 
-    .loom-grid {
-      display: grid;
-      grid-template-columns: minmax(0, .95fr) minmax(380px, 1.05fr);
-      gap: 16px;
-      align-items: start;
-    }
-
     .panel {
       border: 1px solid #dbe4f0;
       border-radius: 14px;
@@ -576,7 +677,8 @@ interface PantallaAprendida {
     }
 
     .capture-panel,
-    .result-panel,
+    .result-head-panel,
+    .result-block,
     .learned-panel {
       padding: 18px;
     }
@@ -588,6 +690,10 @@ interface PantallaAprendida {
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 16px;
+    }
+
+    .result-head-panel .result-head {
+      margin-bottom: 0;
     }
 
     .panel-title h2,
@@ -681,54 +787,6 @@ interface PantallaAprendida {
     .state-chip.aprobado { background: #dbeafe; color: #1d4ed8; }
     .count-chip { background: #e0f2fe; color: #075985; }
 
-    .summary-grid,
-    .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-
-    .summary-grid article,
-    .metric-grid article {
-      min-width: 0;
-      border: 1px solid #dbe4f0;
-      border-radius: 12px;
-      background: #f8fbff;
-      padding: 12px;
-    }
-
-    .summary-grid span,
-    .metric-grid span {
-      display: block;
-      color: #64748b;
-      font-size: 11px;
-      font-weight: 850;
-    }
-
-    .summary-grid strong {
-      display: block;
-      margin-top: 5px;
-      overflow: hidden;
-      color: #0f172a;
-      font-size: 12px;
-      font-weight: 950;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .metric-grid strong {
-      display: block;
-      color: #0f172a;
-      font-size: 22px;
-      line-height: 1;
-      font-weight: 950;
-    }
-
-    .metric-grid span {
-      margin-top: 5px;
-    }
-
     .result-block {
       display: grid;
       gap: 8px;
@@ -792,7 +850,9 @@ interface PantallaAprendida {
     .order-hint {
       display: flex;
       align-items: center;
-      gap: 6px;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
       padding: 8px 10px;
       border: 1px solid #bfdbfe;
       border-radius: 8px;
@@ -801,22 +861,38 @@ interface PantallaAprendida {
       font-weight: 900;
     }
 
+    .order-hint > span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .order-hint mat-icon {
       width: 16px;
       height: 16px;
       font-size: 16px;
     }
 
-    .drag-handle {
-      grid-row: 1 / span 1;
-      align-self: center;
-      color: #94a3b8;
-      cursor: grab;
-      touch-action: none;
+    .order-hint button {
+      flex: 0 0 auto;
+      height: 32px;
+      padding: 0 12px;
+      font-size: 11px;
+      font-weight: 950;
     }
 
-    .step-card.draggable {
-      grid-template-columns: 18px 30px minmax(0, 1fr);
+    .order-hint button mat-icon {
+      margin-right: 4px;
+    }
+
+    .drag-handle {
+      flex: 0 0 auto;
+      color: #94a3b8;
+      cursor: grab;
+      font-size: 17px;
+      width: 17px;
+      height: 17px;
+      touch-action: none;
     }
 
     .cdk-drag-preview {
@@ -829,7 +905,7 @@ interface PantallaAprendida {
       opacity: 0.35;
     }
 
-    .cdk-drop-list-dragging .step-card:not(.cdk-drag-placeholder) {
+    .cdk-drop-list-dragging .plan-node:not(.cdk-drag-placeholder) {
       transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
     }
 
@@ -929,30 +1005,218 @@ interface PantallaAprendida {
       overflow-wrap: anywhere;
     }
 
-    .plan-card {
-      border-left-color: #0ea5e9;
-      background: #f8fbff;
+    .plan-path {
+      display: flex;
+      align-items: flex-start;
+      gap: 30px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 6px 6px 18px;
     }
 
-    .plan-card.writes {
-      border-left-color: #d97706;
+    .plan-node {
+      position: relative;
+      flex: 0 0 190px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+    }
+
+    .plan-node.writes {
+      border-color: #fde68a;
       background: #fffbeb;
     }
 
-    .plan-card b {
-      background: #e0f2fe;
-      color: #0369a1;
+    .plan-node:not(.last)::after {
+      content: '';
+      position: absolute;
+      top: 34px;
+      right: -30px;
+      width: 22px;
+      height: 2px;
+      background: #cbd5e1;
     }
 
-    .plan-card.writes b {
+    .plan-node:not(.last)::before {
+      content: '';
+      position: absolute;
+      top: 28px;
+      right: -33px;
+      width: 8px;
+      height: 8px;
+      border-top: 2px solid #cbd5e1;
+      border-right: 2px solid #cbd5e1;
+      transform: rotate(45deg);
+    }
+
+    .plan-node-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .plan-node-badge {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 12px;
+      font-weight: 950;
+    }
+
+    .plan-node-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: #eff6ff;
+      color: #2563eb;
+    }
+
+    .plan-node-icon mat-icon {
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+    }
+
+    .plan-node.writes .plan-node-badge,
+    .plan-node.writes .plan-node-icon {
       background: #fef3c7;
       color: #b45309;
     }
 
-    .plan-card em {
+    .plan-node-title {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: #0f172a;
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1.35;
+    }
+
+    .plan-node-title em {
+      display: block;
+      margin-top: 3px;
       font-style: normal;
       color: #b45309;
+      font-size: 10px;
       font-weight: 950;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .plan-node-meta {
+      display: block;
+      color: #64748b;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 10.5px;
+      line-height: 1.5;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
+
+    .plan-node .drag-handle {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+
+    /* Pantalla nombrada por el SOP pero todavía fuera del plan ejecutable. */
+    .screen-node {
+      flex-basis: 220px;
+    }
+
+    .screen-node.pending {
+      border-style: dashed;
+      background: #f8fafc;
+    }
+
+    .screen-node.pending .plan-node-badge {
+      background: #f1f5f9;
+      color: #94a3b8;
+    }
+
+    .screen-thumb {
+      position: relative;
+      width: 100%;
+      height: 128px;
+      margin: 0 0 2px;
+      padding: 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 9px;
+      overflow: hidden;
+      background: #f1f5f9;
+      cursor: default;
+    }
+
+    .screen-thumb:not(:disabled) {
+      cursor: pointer;
+    }
+
+    .screen-thumb img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+    }
+
+    .screen-thumb-empty {
+      display: grid;
+      justify-items: center;
+      gap: 4px;
+      width: 100%;
+      height: 100%;
+      color: #94a3b8;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .screen-thumb-empty mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+    }
+
+    .screen-thumb-zoom {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      opacity: 0;
+      background: rgba(15, 23, 42, .38);
+      color: #ffffff;
+      transition: opacity 120ms ease;
+    }
+
+    .screen-thumb:not(:disabled):hover .screen-thumb-zoom {
+      opacity: 1;
+    }
+
+    .plan-node-chip {
+      align-self: flex-start;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #166534;
+      font-size: 10px;
+      font-weight: 950;
+    }
+
+    .screen-node.pending .plan-node-chip {
+      background: #f1f5f9;
+      color: #64748b;
     }
 
     .block-hint {
@@ -1169,10 +1433,114 @@ interface PantallaAprendida {
       height: 18px;
     }
 
-    @media (max-width: 1180px) {
-      .loom-grid {
-        grid-template-columns: 1fr;
-      }
+    .captura-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      background: rgba(15, 23, 42, .68);
+      backdrop-filter: blur(4px);
+    }
+
+    .captura-modal-card {
+      width: min(1180px, 96vw);
+      max-height: 92vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      overflow: hidden;
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 28px 90px rgba(15, 23, 42, .36);
+    }
+
+    .captura-modal-card header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .captura-modal-card header span {
+      display: block;
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .captura-modal-card header strong {
+      display: block;
+      overflow: hidden;
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 950;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .captura-modal-body {
+      position: relative;
+      min-height: 420px;
+      display: grid;
+      place-items: center;
+      padding: 16px 58px;
+      background: #f8fafc;
+    }
+
+    .captura-error {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+      max-width: 320px;
+      color: #64748b;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .captura-error mat-icon {
+      color: #94a3b8;
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+    }
+
+    .captura-modal-body img {
+      max-width: 100%;
+      max-height: calc(92vh - 136px);
+      object-fit: contain;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, .18);
+    }
+
+    .captura-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 42px;
+      height: 42px;
+      background: #ffffff;
+      color: #2563eb;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, .18);
+    }
+
+    .captura-nav.prev { left: 12px; }
+    .captura-nav.next { right: 12px; }
+
+    .captura-modal-card footer {
+      padding: 10px 16px;
+      border-top: 1px solid #e2e8f0;
+      background: #ffffff;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 850;
+      text-align: center;
     }
 
     @media (max-width: 760px) {
@@ -1195,8 +1563,6 @@ interface PantallaAprendida {
         flex: 1 1 150px;
       }
 
-      .summary-grid,
-      .metric-grid,
       .field-grid,
       .learned-grid {
         grid-template-columns: 1fr;
@@ -1223,11 +1589,85 @@ export class QaSopLoomComponent implements OnInit {
   eliminandoId = '';
   /** Se arrastró un paso del Plan ejecutable y todavía no se guardó el flujo. */
   ordenSinGuardar = false;
+  capturaAbierta: CapturaAbierta | null = null;
+  capturaConError = false;
 
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.cargarAprendizajes();
+  }
+
+  /**
+   * Pantallas que el SOP nombra, en orden. Las resuelve el backend contra el
+   * catálogo, así que no dependen de la lista de palabras de este componente.
+   */
+  get pantallasDelFlujo(): PantallaRecorrida[] {
+    const definicion = this.objeto(this.resultado?.definicionEjecutable);
+    const rutas = this.objeto(definicion['rutas']);
+    return this.arrayObjetos(rutas['recorrido']).map((pantalla, indice) => ({
+      orden: this.numero(pantalla['orden'], indice + 1),
+      codigo: this.texto(pantalla['codigo']),
+      ruta: this.texto(pantalla['ruta']),
+      nombre: this.texto(pantalla['nombre']),
+      instrumentada: Boolean(pantalla['instrumentada']),
+      cubierta: Boolean(pantalla['cubierta']),
+      pasos: this.numero(pantalla['pasos'], 0),
+      campos: this.numero(pantalla['campos'], 0),
+      inspeccionId: this.texto(pantalla['inspeccion_id']),
+    }));
+  }
+
+  /** Por qué una pantalla está o no dentro del plan ejecutable. */
+  estadoPantalla(pantalla: PantallaRecorrida): string {
+    if (pantalla.cubierta) return 'En el plan';
+    if (!pantalla.instrumentada) return 'Sin data-testid';
+    return 'Fuera del plan';
+  }
+
+  trackByPantalla(_index: number, pantalla: PantallaRecorrida): string {
+    return pantalla.ruta;
+  }
+
+  /** Pantallas del recorrido que sí tienen una foto guardada, en orden. */
+  private get pantallasConFoto(): PantallaRecorrida[] {
+    return this.pantallasDelFlujo.filter((pantalla) => pantalla.inspeccionId);
+  }
+
+  capturaUrl(pantalla: PantallaRecorrida): string {
+    return this.api.url(`/qa/sop-loom/inspecciones/${encodeURIComponent(pantalla.inspeccionId)}/captura`);
+  }
+
+  abrirCaptura(pantalla: PantallaRecorrida): void {
+    if (!pantalla.inspeccionId) return;
+    const indice = this.pantallasConFoto.findIndex((item) => item.ruta === pantalla.ruta);
+    if (indice < 0) return;
+    this.capturaConError = false;
+    this.capturaAbierta = { indice, nombre: pantalla.nombre, url: this.capturaUrl(pantalla) };
+  }
+
+  cerrarCaptura(): void {
+    this.capturaAbierta = null;
+  }
+
+  puedeMoverCaptura(): boolean {
+    return this.pantallasConFoto.length > 1;
+  }
+
+  totalCapturas(): number {
+    return this.pantallasConFoto.length;
+  }
+
+  moverCaptura(paso: number): void {
+    const conFoto = this.pantallasConFoto;
+    if (!this.capturaAbierta || conFoto.length === 0) return;
+    const siguiente = conFoto[(this.capturaAbierta.indice + paso + conFoto.length) % conFoto.length];
+    this.capturaConError = false;
+    this.capturaAbierta = {
+      indice: (this.capturaAbierta.indice + paso + conFoto.length) % conFoto.length,
+      nombre: siguiente.nombre,
+      url: this.capturaUrl(siguiente),
+    };
   }
 
   /** Pasos resueltos por el backend contra la navegación real del sandbox. */
@@ -1570,6 +2010,28 @@ export class QaSopLoomComponent implements OnInit {
     return paso.orden;
   }
 
+  /** Icono representativo del paso, según su tipo y el campo que completa. */
+  iconoPaso(paso: PasoEjecutable): string {
+    if (paso.tipo === 'navegar') return 'login';
+    if (paso.tipo === 'verificar' || paso.tipo === 'verificar_fila') return 'fact_check';
+    if (paso.tipo === 'click') return paso.escribe ? 'save' : 'ads_click';
+
+    const campo = paso.campo.toLowerCase();
+    const coincide = (...claves: string[]) => claves.some((clave) => campo.includes(clave));
+    if (coincide('telefono')) return 'call';
+    if (coincide('email', 'correo')) return 'mail';
+    if (coincide('cliente', 'empleado')) return 'person';
+    if (coincide('area', 'sector')) return 'apartment';
+    if (coincide('documento', 'legajo')) return 'badge';
+    if (coincide('cuil', 'cuit')) return 'fingerprint';
+    if (coincide('fecha')) return 'event';
+    if (coincide('periodo')) return 'calendar_month';
+    if (coincide('excel', 'archivo')) return 'attach_file';
+    if (coincide('dataset')) return 'dataset';
+    if (coincide('remuneracion', 'monto', 'valor', 'deduccion', 'tolerancia')) return 'payments';
+    return 'edit';
+  }
+
   trackByCaso(_index: number, caso: CasoAEjecutar): string {
     return caso.id;
   }
@@ -1716,9 +2178,8 @@ export class QaSopLoomComponent implements OnInit {
     if (directa) return directa.slice(0, 80);
     const codigo = /\bQA\s*-\s*Pantalla\s*\d+\b/i.exec(texto)?.[0];
     if (codigo) return codigo.replace(/\s+/g, ' ');
-    if (/pantalla\s*3/i.test(texto)) return 'QA - Pantalla 3';
-    if (/pantalla\s*2/i.test(texto)) return 'QA - Pantalla 2';
-    if (/pantalla\s*1/i.test(texto)) return 'QA - Pantalla 1';
+    if (/pantalla\s*3/i.test(texto)) return 'Legajo de Cliente';
+    if (/pantalla\s*1/i.test(texto)) return 'Legajo de Ganancias';
     return 'Flujo aprendido desde Loom';
   }
 
@@ -1738,7 +2199,6 @@ export class QaSopLoomComponent implements OnInit {
     const normalizada = this.normalizar(texto);
     if (normalizada.includes('sop loom')) return '/qa/sop-loom';
     if (normalizada.includes('pantalla 3')) return '/qa/pantalla-3';
-    if (normalizada.includes('pantalla 2')) return '/qa/pantalla-2';
     if (normalizada.includes('pantalla 1')) return '/qa/pantalla-1';
     if (normalizada.includes('asistente')) return '/qa/asistente';
     if (normalizada.includes('excel')) return '/cargar-excel';
@@ -1749,7 +2209,6 @@ export class QaSopLoomComponent implements OnInit {
     const normalizada = this.normalizar(accion);
     if (normalizada.includes('sop loom')) return '/qa/sop-loom';
     if (normalizada.includes('pantalla 3')) return '/qa/pantalla-3';
-    if (normalizada.includes('pantalla 2')) return '/qa/pantalla-2';
     if (normalizada.includes('pantalla 1')) return '/qa/pantalla-1';
     if (normalizada.includes('asistente')) return '/qa/asistente';
     if (normalizada.includes('excel')) return '/cargar-excel';

@@ -65,7 +65,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
               class="submenu-link"
               data-testid="nav-qa-pantalla-1"
               (click)="cerrarMenuSiMobile()">
-              Pantalla 1
+              Legajo de Ganancias
             </a>
             <a
               mat-button
@@ -74,7 +74,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
               class="submenu-link"
               data-testid="nav-qa-pantalla-3"
               (click)="cerrarMenuSiMobile()">
-              Pantalla 3
+              Legajo de Cliente
             </a>
             <a
               mat-button
@@ -111,6 +111,15 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
               data-testid="nav-qa-validaciones"
               (click)="cerrarMenuSiMobile()">
               Validaciones
+            </a>
+            <a
+              mat-button
+              routerLink="/qa/estadisticas"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-estadisticas"
+              (click)="cerrarMenuSiMobile()">
+              Estadísticas
             </a>
           </div>
         </nav>
@@ -154,18 +163,18 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
   `,
   styles: [`
     .layout-shell { height: 100vh; background: #f8fafc; }
-    .sidebar { width: 190px; border-right: 1px solid #e2e8f0; background: #ffffff; }
+    .sidebar { width: 190px; background: #2458fb; }
     .brand { padding: 14px 12px 18px; }
-    .brand img { display: block; width: 138px; max-width: 100%; border-radius: 9px; box-shadow: 0 10px 28px rgba(37, 99, 235, 0.16); }
+    .brand img { display: block; width: 138px; max-width: 100%; border-radius: 9px; box-shadow: 0 10px 28px rgba(15, 27, 61, 0.28); }
     .brand img.oculto { display: none; }
-    .brand-fallback { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: #2563eb; color: #ffffff; font-size: 18px; font-weight: 900; box-shadow: 0 10px 28px rgba(37, 99, 235, 0.16); }
+    .brand-fallback { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.14); color: #ffffff; font-size: 18px; font-weight: 900; }
     .menu { display: flex; flex-direction: column; gap: 6px; padding: 0 8px; }
     .menu-link {
       width: 100%;
       height: 42px;
       justify-content: flex-start;
       border-radius: 12px;
-      color: #111827;
+      color: rgba(255, 255, 255, 0.88) !important;
       font-size: 14px;
       font-weight: 650;
       letter-spacing: -0.01em;
@@ -175,9 +184,9 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
     .menu-link span {
       line-height: 1;
     }
-    .menu-link mat-icon { margin-right: 10px; color: #0f1b3d; font-size: 20px; width: 20px; height: 20px; }
-    .menu-link.activo { background: #eff6ff; color: #2563eb; }
-    .menu-link.activo mat-icon { color: #2563eb; }
+    .menu-link mat-icon { margin-right: 10px; color: rgba(255, 255, 255, 0.82); font-size: 20px; width: 20px; height: 20px; }
+    .menu-link.activo { background: rgba(255, 255, 255, 0.18); color: #ffffff !important; }
+    .menu-link.activo mat-icon { color: #ffffff; }
     .menu-toggle .chevron {
       margin-left: auto;
       margin-right: 0;
@@ -189,27 +198,27 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
       gap: 4px;
       margin: -2px 0 4px 34px;
       padding-left: 10px;
-      border-left: 1px solid #dbeafe;
+      border-left: 1px solid rgba(255, 255, 255, 0.26);
     }
     .submenu-link {
       width: 100%;
       height: 34px;
       justify-content: flex-start;
       border-radius: 10px;
-      color: #475569;
+      color: rgba(255, 255, 255, 0.72) !important;
       font-size: 12px;
       font-weight: 850;
     }
     .submenu-link.activo {
-      background: #eff6ff;
-      color: #2563eb;
+      background: rgba(255, 255, 255, 0.18);
+      color: #ffffff !important;
     }
-    .version { position: absolute; left: 20px; bottom: 20px; color: #64748b; font-size: 12px; line-height: 1.35; }
-    .version b { color: #0f172a; }
+    .version { position: absolute; left: 20px; bottom: 20px; color: rgba(255, 255, 255, 0.65); font-size: 12px; line-height: 1.35; }
+    .version b { color: #ffffff; }
     .contenido { min-width: 0; background: #f8fafc; }
     .toolbar { position: sticky; top: 0; z-index: 20; min-height: 52px; height: 52px; padding: 0 24px; border-bottom: 1px solid #e2e8f0; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(10px); }
     .titulo { font-size: 16px; font-weight: 800; color: #0f172a; }
-    .boton-menu { display: none; margin-right: 8px; color: #2563eb; }
+    .boton-menu { display: none; margin-right: 8px; color: #2458fb; }
     .usuario { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; color: #475569; font-size: 12px; font-weight: 700; }
     .usuario mat-icon { font-size: 20px; width: 20px; height: 20px; }
     .logout { height: 36px; border-radius: 12px; color: #0f172a; font-weight: 900; }
@@ -220,7 +229,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
       .usuario { display: none; }
       .logout span { display: none; }
       .sidebar { width: min(82vw, 300px); }
-      .version { position: static; margin: 28px 20px 20px; padding-top: 18px; border-top: 1px solid #e2e8f0; }
+      .version { position: static; margin: 28px 20px 20px; padding-top: 18px; border-top: 1px solid rgba(255, 255, 255, 0.26); }
     }
   `],
 })

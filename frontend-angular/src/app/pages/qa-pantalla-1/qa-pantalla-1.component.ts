@@ -107,7 +107,7 @@ interface CasoGuardadoLegacy {
         <div>
           <h1>
             <mat-icon>science</mat-icon>
-            QA - Pantalla 1
+            Legajo de Ganancias
           </h1>
           <p>Alta de casos para probar la auditoría de ganancias con Playwright.</p>
         </div>

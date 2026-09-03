@@ -13,6 +13,7 @@ export interface AprendizajeAprobado {
   nombre: string;
   modulo: string;
   ruta: string;
+  estado: 'borrador' | 'revisar' | 'listo' | 'aprobado';
   firmas: { negocio: unknown; tecnica: unknown };
 }
 

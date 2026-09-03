@@ -254,7 +254,10 @@ export class QaCasosService {
     const contextoComplementario = this.objeto(contexto['contexto_complementario']);
     const origenContexto = this.objeto(contextoComplementario['origen']);
     const pantallaOrigen = this.texto(origen['pantalla']) || this.texto(origenContexto['pantalla']);
-    const permiteCasoSinDataset = pantallaOrigen === 'QA - Pantalla 3';
+    const tipoOrigen = this.texto(origen['tipo']) || this.texto(origenContexto['tipo']);
+    // 'QA - Pantalla 3' queda por compatibilidad con casos guardados antes de
+    // renombrar la pantalla a Legajo de Cliente; el tipo es lo que manda ahora.
+    const permiteCasoSinDataset = tipoOrigen === 'formulario_cliente_basico' || pantallaOrigen === 'QA - Pantalla 3';
     const definicionTecnica = await this.definicionesTecnicas.obtenerParaUso(
       this.texto(body['definicion_tecnica_codigo']) || this.texto(body['definicion_codigo']) || QA_DEFINICION_TECNICA_DEFAULT,
     );
@@ -332,7 +335,9 @@ export class QaCasosService {
     opciones: { pantalla_origen: string; tipo_origen: string },
   ): Promise<Record<string, unknown>> {
     if (fila.datos['__error']) throw new BadRequestException(this.texto(fila.datos['__error']));
-    if (opciones.pantalla_origen === 'QA - Pantalla 3') {
+    // 'QA - Pantalla 3' queda por compatibilidad con importaciones armadas
+    // antes de renombrar la pantalla a Legajo de Cliente.
+    if (opciones.tipo_origen === 'importacion_qa_pantalla_3' || opciones.pantalla_origen === 'QA - Pantalla 3') {
       return this.payloadPantalla3DesdeFilaImportada(fila, archivoImportacion, opciones);
     }
 
@@ -456,7 +461,7 @@ export class QaCasosService {
       definicion_tecnica_codigo: QA_DEFINICION_TECNICA_DEFAULT,
       dataset_codigo: '',
       periodo: '',
-      descripcion: `Alta Pantalla 3 - ${cliente}`,
+      descripcion: `Alta Legajo de Cliente - ${cliente}`,
       archivo: null,
       contexto: {
         empleado: {

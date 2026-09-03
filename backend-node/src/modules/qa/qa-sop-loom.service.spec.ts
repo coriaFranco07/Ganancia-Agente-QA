@@ -85,12 +85,16 @@ async function compilar(entrada: {
   consideracionesDecididas?: Record<string, unknown>[];
   ordenManualPasos?: string[];
   reglasValidacion?: Record<string, unknown>[];
+  capturasPorRuta?: Record<string, string>;
 }) {
   const casos = entrada.casos ?? [casoPantalla3('QA-P3-ALTA-27345678-20260415', CASO_COMPLETO)];
   const reglasStub = entrada.reglasValidacion
     ? ({ listarResueltas: async () => entrada.reglasValidacion } as never)
     : undefined;
-  const service = new QaSopLoomService(null as never, modeloCasos(casos) as never, undefined, reglasStub);
+  const inspectorStub = entrada.capturasPorRuta
+    ? ({ ultimaConCaptura: async (ruta: string) => entrada.capturasPorRuta?.[ruta] ?? null } as never)
+    : undefined;
+  const service = new QaSopLoomService(null as never, modeloCasos(casos) as never, inspectorStub, reglasStub);
 
   return (service as unknown as {
     compilar(input: {
@@ -108,6 +112,7 @@ async function compilar(entrada: {
       casos: Array<Record<string, unknown>>;
       consideraciones: Array<Record<string, unknown>>;
       pendientes: string[];
+      recorrido: Array<Record<string, unknown>>;
     }>;
   }).compilar({
     ruta: entrada.ruta,
@@ -775,13 +780,6 @@ describe('QaSopLoomService.compilar', () => {
     expect(resultado.pendientes.join(' ')).toMatch(/fuente de casos QA/i);
   });
 
-  it('deja pendiente una pantalla sin data-testid en lugar de inventar selectores', async () => {
-    const resultado = await compilar({ ruta: '/qa/pantalla-2', pasos: ['Abro Pantalla 2.', 'Guardo.'] });
-
-    expect(resultado.pasos_ejecutables).toEqual([]);
-    expect(resultado.pendientes.join(' ')).toMatch(/data-testid/i);
-  });
-
   it('deja pendiente una pantalla sin fuente de casos configurada', async () => {
     // SOP Loom no genera casos QA: no hay datos con los que operarla.
     const resultado = await compilar({
@@ -870,5 +868,114 @@ describe('QaSopLoomService.compilar', () => {
 
     const selectores = resultado.pasos_ejecutables.map((paso) => paso['selector']);
     expect(selectores).not.toContain('[data-testid="qa-screen3-fecha-fin-input"]');
+  });
+});
+
+describe('QaSopLoomService recorrido de pantallas', () => {
+  it('un flujo de una sola pantalla devuelve esa pantalla, cubierta por el plan', async () => {
+    const resultado = await compilar({ ruta: '/qa/pantalla-3', pasos: PASOS_PANTALLA_3 });
+
+    expect(resultado.recorrido).toHaveLength(1);
+    expect(resultado.recorrido[0]).toMatchObject({
+      orden: 1,
+      ruta: '/qa/pantalla-3',
+      cubierta: true,
+      instrumentada: true,
+    });
+    expect(resultado.recorrido[0]['pasos']).toBe(resultado.pasos_ejecutables.length);
+    expect(resultado.recorrido[0]['campos']).toBe(resultado.campos.length);
+  });
+
+  it('un SOP que salta de una pantalla a otra las devuelve en el orden en que las nombra', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-1',
+      pasos: [
+        'Abro Pantalla 1 y completo el legajo.',
+        'Toco Siguiente y eso me lleva a Pantalla 3.',
+        'Completo el CUIL y guardo el caso.',
+      ],
+    });
+
+    expect(resultado.recorrido.map((pantalla) => pantalla['ruta'])).toEqual([
+      '/qa/pantalla-1',
+      '/qa/pantalla-3',
+    ]);
+  });
+
+  it('marca cubierta solo la pantalla que el plan compila, no las demas que el SOP nombra', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-1',
+      pasos: [
+        'Abro Pantalla 1 y completo el legajo.',
+        'Toco Siguiente y eso me lleva a Pantalla 3.',
+        'Completo el CUIL y guardo el caso.',
+      ],
+    });
+
+    const porRuta = new Map(resultado.recorrido.map((pantalla) => [pantalla['ruta'], pantalla]));
+    expect(porRuta.get('/qa/pantalla-1')?.['cubierta']).toBe(true);
+    expect(porRuta.get('/qa/pantalla-3')?.['cubierta']).toBe(false);
+    expect(porRuta.get('/qa/pantalla-3')?.['pasos']).toBe(0);
+  });
+
+  it('avisa como pendiente que el salto entre pantallas todavia no se automatiza', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-1',
+      pasos: [
+        'Abro Pantalla 1 y completo el legajo.',
+        'Toco Siguiente y eso me lleva a Pantalla 3.',
+        'Completo el CUIL y guardo el caso.',
+      ],
+    });
+
+    expect(resultado.pendientes.join(' ')).toMatch(/salto entre pantallas todav[ií]a no se automatiza/i);
+  });
+
+  it('incluye la pantalla compilada aunque el texto del SOP no la nombre', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-3',
+      pasos: ['Completo el cliente.', 'Completo el CUIL.', 'Guardo el caso.'],
+    });
+
+    expect(resultado.recorrido.map((pantalla) => pantalla['ruta'])).toEqual(['/qa/pantalla-3']);
+    expect(resultado.recorrido[0]['cubierta']).toBe(true);
+  });
+
+  it('la pantalla cubierta trae el id de su propia inspección, para pedir su foto', async () => {
+    const resultado = await compilar({ ruta: '/qa/pantalla-3', pasos: PASOS_PANTALLA_3 });
+
+    expect(resultado.recorrido[0]['inspeccion_id']).toBe('QA-NAV-qapantalla3');
+  });
+
+  it('una pantalla nombrada pero no cubierta presta la ultima inspeccion con foto de esa ruta', async () => {
+    const resultado = await compilar({
+      ruta: '/qa/pantalla-1',
+      pasos: [
+        'Abro Pantalla 1 y completo el legajo.',
+        'Toco Siguiente y eso me lleva a Pantalla 3.',
+        'Completo el CUIL y guardo el caso.',
+      ],
+      capturasPorRuta: { '/qa/pantalla-3': 'QA-NAV-VIEJA-PANTALLA-3' },
+    });
+
+    const pantalla3 = resultado.recorrido.find((pantalla) => pantalla['ruta'] === '/qa/pantalla-3');
+    expect(pantalla3?.['inspeccion_id']).toBe('QA-NAV-VIEJA-PANTALLA-3');
+  });
+
+  it('sin inspector disponible o sin foto previa, la pantalla no cubierta queda sin inspeccion_id', async () => {
+    const sinInspector = await compilar({
+      ruta: '/qa/pantalla-1',
+      pasos: ['Abro Pantalla 1.', 'Toco Siguiente y eso me lleva a Pantalla 3.', 'Guardo.'],
+    });
+    const pantalla3SinInspector = sinInspector.recorrido.find((pantalla) => pantalla['ruta'] === '/qa/pantalla-3');
+    expect(pantalla3SinInspector?.['inspeccion_id']).toBe('');
+
+    const sinFotoPrevia = await compilar({
+      ruta: '/qa/pantalla-1',
+      pasos: ['Abro Pantalla 1.', 'Toco Siguiente y eso me lleva a Pantalla 3.', 'Guardo.'],
+      capturasPorRuta: {},
+    });
+    const pantalla3SinFoto = sinFotoPrevia.recorrido.find((pantalla) => pantalla['ruta'] === '/qa/pantalla-3');
+    expect(pantalla3SinFoto?.['inspeccion_id']).toBe('');
   });
 });

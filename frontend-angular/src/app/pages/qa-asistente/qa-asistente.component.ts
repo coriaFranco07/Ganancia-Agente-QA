@@ -3015,7 +3015,7 @@ export class QaAsistenteComponent implements OnInit, OnDestroy {
           texto: `Ejecución iniciada desde plan aprobado. El plan quedó en estado ${this.estadoPlanTexto(plan.estado)} y se registró la ejecución ${plan.ejecucion_id || '-'}.`,
           acciones: [
             { tipo: 'preguntar', etiqueta: 'Diagnóstico', mensaje: `Por qué falló ${plan.caso_id}` },
-            { tipo: 'navegar', etiqueta: 'Abrir Pantalla 1', ruta: '/qa/pantalla-1' },
+            { tipo: 'navegar', etiqueta: 'Abrir Legajo de Ganancias', ruta: '/qa/pantalla-1' },
           ],
           plan,
           politica_registro: this.contexto?.politica_registro || '',
@@ -3332,7 +3332,7 @@ export class QaAsistenteComponent implements OnInit, OnDestroy {
       return [
         { tipo: 'aprobar_plan', etiqueta: 'Aprobar plan', plan_id: plan.id, hash_plan: plan.hash_plan },
         { tipo: 'preguntar', etiqueta: 'Qué valida', mensaje: `Qué valida el dataset del caso ${plan.caso_id}` },
-        { tipo: 'navegar', etiqueta: 'Abrir Pantalla 1', ruta: '/qa/pantalla-1' },
+        { tipo: 'navegar', etiqueta: 'Abrir Legajo de Ganancias', ruta: '/qa/pantalla-1' },
       ];
     }
 

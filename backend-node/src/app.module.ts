@@ -46,12 +46,15 @@ import { QaSopLoomService } from './modules/qa/qa-sop-loom.service';
 import { QaPantallaInspectorService } from './modules/qa/qa-pantalla-inspector.service';
 import { QaReglasValidacionController } from './modules/qa/qa-reglas-validacion.controller';
 import { QaReglasValidacionService } from './modules/qa/qa-reglas-validacion.service';
+import { QaEstadisticasController } from './modules/qa/qa-estadisticas.controller';
+import { QaEstadisticasService } from './modules/qa/qa-estadisticas.service';
 import { QaCaso, QaCasoSchema } from './modules/qa/schemas/qa-caso.schema';
 import { QaDefinicionTecnica, QaDefinicionTecnicaSchema } from './modules/qa/schemas/qa-definicion-tecnica.schema';
 import { QaEjecucion, QaEjecucionSchema } from './modules/qa/schemas/qa-ejecucion.schema';
 import { QaHallazgo, QaHallazgoSchema } from './modules/qa/schemas/qa-hallazgo.schema';
 import { QaPlanAsistente, QaPlanAsistenteSchema } from './modules/qa/schemas/qa-plan-asistente.schema';
 import { QaSopLoomAprendizaje, QaSopLoomAprendizajeSchema } from './modules/qa/schemas/qa-sop-loom-aprendizaje.schema';
+import { QaSopLoomEjecucion, QaSopLoomEjecucionSchema } from './modules/qa/schemas/qa-sop-loom-ejecucion.schema';
 import { QaInspeccionPantalla, QaInspeccionPantallaSchema } from './modules/qa/schemas/qa-inspeccion-pantalla.schema';
 import { QaReglaValidacion, QaReglaValidacionSchema } from './modules/qa/schemas/qa-regla-validacion.schema';
 import { QaSuiteEjecucion, QaSuiteEjecucionSchema } from './modules/qa/suite/schemas/qa-suite-ejecucion.schema';
@@ -75,6 +78,7 @@ import { QaSuiteDerivadorService } from './modules/qa/suite/qa-suite-derivador.s
       {name:QaHallazgo.name,schema:QaHallazgoSchema},
       {name:QaPlanAsistente.name,schema:QaPlanAsistenteSchema},
       {name:QaSopLoomAprendizaje.name,schema:QaSopLoomAprendizajeSchema},
+      {name:QaSopLoomEjecucion.name,schema:QaSopLoomEjecucionSchema},
       {name:QaInspeccionPantalla.name,schema:QaInspeccionPantallaSchema},
       {name:QaReglaValidacion.name,schema:QaReglaValidacionSchema},
       {name:QaSuiteEjecucion.name,schema:QaSuiteEjecucionSchema},
@@ -82,7 +86,7 @@ import { QaSuiteDerivadorService } from './modules/qa/suite/qa-suite-derivador.s
       {name:QaSuiteCorrida.name,schema:QaSuiteCorridaSchema},
     ]),
   ],
-  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController, QaReglasValidacionController, QaSuiteController],
+  controllers: [HealthController, VersionController, AuthController, AnalisisController, DiagnosticosController, ConfiguracionController, QaCasosController, QaAsistenteController, QaDefinicionesTecnicasController, QaDatasetsController, QaRunnerController, QaHallazgosController, QaSopLoomController, QaReglasValidacionController, QaEstadisticasController, QaSuiteController],
   providers: [
     AuthService,
     AuthGuard,
@@ -111,6 +115,7 @@ import { QaSuiteDerivadorService } from './modules/qa/suite/qa-suite-derivador.s
     QaSopLoomService,
     QaPantallaInspectorService,
     QaReglasValidacionService,
+    QaEstadisticasService,
     QaSuiteRunnerService,
     QaSuiteDerivadorService,
   ],

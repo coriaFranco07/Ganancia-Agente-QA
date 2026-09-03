@@ -55,26 +55,29 @@ function crearPasswordHash(valor) {
 }
 
 /**
- * Carga un aprendizaje aprobado y re-verifica los hashes de definicion y de
- * navegacion antes de devolverlo. No exige casos congelados: la Suite no los
- * usa. Lanza si el aprendizaje no existe, no esta aprobado, o si la
- * definicion/navegacion cambiaron despues de la aprobacion.
+ * Carga un aprendizaje de SOP Loom compilado. No exige que este aprobado: si
+ * ya esta cargado en la base y tiene definicion ejecutable, alcanza para que
+ * la Suite lo corra. Para los que si pasaron por aprobacion, ademas
+ * re-verifica que la definicion y la navegacion no hayan cambiado desde que
+ * se aprobaron -esa rigurosidad se mantiene solo para los ya aprobados. No
+ * exige casos congelados: la Suite no los usa.
  */
 export async function cargarAprendizaje(aprendizajeId) {
-  if (!aprendizajeId) throw new Error('Definí AUDITORIA_QA_SUITE_APRENDIZAJE con el id del aprendizaje aprobado.');
+  if (!aprendizajeId) throw new Error('Definí AUDITORIA_QA_SUITE_APRENDIZAJE con el id del aprendizaje.');
 
   const doc = await mongoose.connection.collection('qa_sop_loom_aprendizajes').findOne({ id: aprendizajeId });
   if (!doc) throw new Error(`No existe aprendizaje SOP Loom ${aprendizajeId}.`);
-  if (doc.estado !== 'aprobado') throw new Error(`El aprendizaje ${aprendizajeId} no está aprobado.`);
   if (!doc.definicion_ejecutable) throw new Error(`El aprendizaje ${aprendizajeId} no tiene definición ejecutable.`);
-  if (!doc.inspeccion_navegacion?.hash) throw new Error(`El aprendizaje ${aprendizajeId} no tiene navegación aprobada.`);
+  if (!doc.inspeccion_navegacion?.hash) throw new Error(`El aprendizaje ${aprendizajeId} no tiene navegación inspeccionada.`);
 
-  const hashDefinicion = createHash('sha256').update(JSON.stringify(doc.definicion_ejecutable)).digest('hex');
-  if (texto(doc.aprobacion?.hash_definicion) !== hashDefinicion) {
-    throw new Error(`La definición de ${aprendizajeId} cambió después de la aprobación. Volvé a revisarla y aprobarla.`);
-  }
-  if (texto(doc.aprobacion?.hash_navegacion) !== texto(doc.inspeccion_navegacion.hash)) {
-    throw new Error(`La navegación aprobada de ${aprendizajeId} no coincide con la aprobación técnica vigente.`);
+  if (doc.estado === 'aprobado') {
+    const hashDefinicion = createHash('sha256').update(JSON.stringify(doc.definicion_ejecutable)).digest('hex');
+    if (texto(doc.aprobacion?.hash_definicion) !== hashDefinicion) {
+      throw new Error(`La definición de ${aprendizajeId} cambió después de la aprobación. Volvé a revisarla y aprobarla.`);
+    }
+    if (texto(doc.aprobacion?.hash_navegacion) !== texto(doc.inspeccion_navegacion.hash)) {
+      throw new Error(`La navegación aprobada de ${aprendizajeId} no coincide con la aprobación técnica vigente.`);
+    }
   }
 
   return JSON.parse(JSON.stringify(doc));
@@ -93,7 +96,20 @@ export async function validarNavegacionAprobada(page, aprendizaje, frontendUrl) 
   await page.goto(`${frontendUrl}${ruta}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(500);
   const elementos = await inventarioPantalla(page);
-  const hashActual = createHash('sha256').update(JSON.stringify({ ruta, elementos })).digest('hex');
+  // Mismo subconjunto de campos, mismo orden, que `hashInventario()` en
+  // qa-pantalla-inspector.service.ts: hay que reproducir el hash tal cual
+  // se aprobó, no un resumen propio, o el chequeo nunca va a coincidir.
+  const estable = elementos.map((item) => ({
+    testid: item.testid,
+    tag: item.tag,
+    tipo: item.tipo,
+    rol: item.rol,
+    nombre: item.nombre,
+    etiqueta: item.etiqueta,
+    obligatorio: item.obligatorio,
+    opciones: item.opciones,
+  }));
+  const hashActual = createHash('sha256').update(JSON.stringify({ ruta, elementos: estable })).digest('hex');
   const hashAprobado = texto(inspeccion.hash);
 
   if (hashActual !== hashAprobado) {
@@ -114,12 +130,43 @@ export async function validarNavegacionAprobada(page, aprendizaje, frontendUrl) 
   return { ruta };
 }
 
+/**
+ * Extrae los mismos campos, de la misma forma, que `extraerElementos()` en
+ * qa-pantalla-inspector.service.ts (backend). Cualquier diferencia acá
+ * produce un hash distinto al que se guardó en la aprobación aunque la
+ * pantalla no haya cambiado en absoluto.
+ */
 async function inventarioPantalla(page) {
   const elementos = await page.locator('[data-testid]').evaluateAll((nodos) =>
     nodos.map((nodo) => {
       const elemento = nodo;
+      const input = elemento;
       const testid = elemento.getAttribute('data-testid') ?? '';
-      return { testid, tag: elemento.tagName.toLowerCase(), tipo: elemento.type || elemento.getAttribute('type') || '' };
+      const id = elemento.getAttribute('id') ?? '';
+      const labelFor = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+      const labelContenedor = elemento.closest('label');
+      const etiqueta = (
+        elemento.getAttribute('aria-label')
+        || labelFor?.textContent
+        || labelContenedor?.querySelector('span')?.textContent
+        || (['BUTTON', 'A'].includes(elemento.tagName) ? elemento.textContent : '')
+        || elemento.getAttribute('placeholder')
+        || elemento.getAttribute('name')
+        || ''
+      ).replace(/\s+/g, ' ').trim();
+      const opciones = elemento instanceof HTMLSelectElement
+        ? Array.from(elemento.options).map((opcion) => opcion.text.trim()).filter(Boolean)
+        : [];
+      return {
+        testid,
+        tag: elemento.tagName.toLowerCase(),
+        tipo: input.type || elemento.getAttribute('type') || '',
+        rol: elemento.getAttribute('role') || '',
+        nombre: elemento.getAttribute('name') || '',
+        etiqueta,
+        obligatorio: elemento.hasAttribute('required') || elemento.getAttribute('aria-required') === 'true',
+        opciones,
+      };
     }),
   );
   return elementos.filter((item) => item.testid).sort((a, b) => a.testid.localeCompare(b.testid));

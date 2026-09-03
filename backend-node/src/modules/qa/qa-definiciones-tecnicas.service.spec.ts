@@ -30,7 +30,7 @@ function definicionValida(): Record<string, unknown> {
         submit_button: selector('auth-submit-button'),
       },
       formulario_qa: {
-        titulo_texto: 'QA - Pantalla 1',
+        titulo_texto: 'Legajo de Ganancias',
         pagina: selector('qa-pantalla1-page'),
         nuevo_boton: selector('qa-case-reset-button'),
         guardar_boton: selector('qa-case-save-button'),

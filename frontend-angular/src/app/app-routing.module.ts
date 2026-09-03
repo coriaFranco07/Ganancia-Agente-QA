@@ -16,6 +16,7 @@ import { QaPantalla4Component } from './pages/qa-pantalla-4/qa-pantalla-4.compon
 import { QaSopLoomComponent } from './pages/qa-sop-loom/qa-sop-loom.component';
 import { QaCasosComponent } from './pages/qa-casos/qa-casos.component';
 import { QaReglasValidacionComponent } from './pages/qa-reglas-validacion/qa-reglas-validacion.component';
+import { QaEstadisticasComponent } from './pages/qa-estadisticas/qa-estadisticas.component';
 import { AuthGuard } from './core/guards/auth.guard';
 
 const routes: Routes = [
@@ -38,6 +39,7 @@ const routes: Routes = [
   { path: 'qa/sop-loom', component: QaSopLoomComponent, canActivate: [AuthGuard] },
   { path: 'qa/casos', component: QaCasosComponent, canActivate: [AuthGuard] },
   { path: 'qa/validaciones', component: QaReglasValidacionComponent, canActivate: [AuthGuard] },
+  { path: 'qa/estadisticas', component: QaEstadisticasComponent, canActivate: [AuthGuard] },
   { path: '', pathMatch: 'full', redirectTo: 'inicio' },
   { path: '**', redirectTo: 'inicio' },
 ];

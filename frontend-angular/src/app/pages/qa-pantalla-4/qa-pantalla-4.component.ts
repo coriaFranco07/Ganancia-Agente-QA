@@ -144,7 +144,7 @@ const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string 
     <main class="qa-page">
       <section class="titulo-seccion">
         <h1><mat-icon>rule</mat-icon> Suite de Calidad</h1>
-        <p>Corré pasadas automatizadas de funcionalidad, seguridad y accesibilidad sobre flujos aprendidos y aprobados en SOP Loom. Los valores de prueba se generan a partir de las restricciones reales de cada campo — nunca se usan datos de negocio.</p>
+        <p>Corré pasadas automatizadas de funcionalidad, seguridad y accesibilidad sobre flujos aprendidos en SOP Loom. Los valores de prueba se generan a partir de las restricciones reales de cada campo — nunca se usan datos de negocio.</p>
       </section>
 
       <nav class="tabs" *ngIf="vista !== 'informe'">
@@ -154,13 +154,13 @@ const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string 
 
       <!-- ── Vista: preparar ─────────────────────────────────────────── -->
       <ng-container *ngIf="vista === 'preparar'">
-        <div class="cargando" *ngIf="cargandoAprendizajes"><mat-spinner diameter="20"></mat-spinner><span>Cargando flujos aprobados...</span></div>
+        <div class="cargando" *ngIf="cargandoAprendizajes"><mat-spinner diameter="20"></mat-spinner><span>Cargando flujos...</span></div>
 
         <div class="panel empty-state" *ngIf="!cargandoAprendizajes && aprendizajes.length === 0">
           <mat-icon>inventory_2</mat-icon>
           <div>
-            <h2>Todavía no hay flujos aprobados</h2>
-            <p>La Suite solo corre sobre aprendizajes de SOP Loom con estado <strong>aprobado</strong>. Andá a <a routerLink="/qa/sop-loom">QA / SOP Loom</a> para aprender y aprobar un flujo.</p>
+            <h2>Todavía no hay flujos cargados</h2>
+            <p>La Suite corre sobre cualquier aprendizaje de SOP Loom ya compilado, este aprobado o no. Andá a <a routerLink="/qa/sop-loom">QA / SOP Loom</a> para grabar y guardar un flujo.</p>
           </div>
         </div>
 
@@ -183,11 +183,11 @@ const CATEGORIAS: { id: CategoriaQaSuite; etiqueta: string; descripcion: string 
                       <div class="sub">{{ flujo.modulo }} · {{ flujo.ruta }}</div>
                     </div>
                   </div>
-                  <span class="estado-pill verde">Aprobado</span>
+                  <span class="estado-pill" [ngClass]="flujo.estado === 'aprobado' ? 'verde' : 'sin-correr'">{{ textoEstadoAprendizaje(flujo.estado) }}</span>
                 </div>
                 <div class="firmas">
-                  <span class="firma"><mat-icon>check</mat-icon> Negocio</span>
-                  <span class="firma"><mat-icon>check</mat-icon> Técnica</span>
+                  <span class="firma"><mat-icon>{{ flujo.firmas.negocio ? 'check' : 'schedule' }}</mat-icon> Negocio</span>
+                  <span class="firma"><mat-icon>{{ flujo.firmas.tecnica ? 'check' : 'schedule' }}</mat-icon> Técnica</span>
                 </div>
               </div>
             </div>
@@ -564,6 +564,11 @@ export class QaPantalla4Component implements OnInit, OnDestroy {
 
   textoSemaforo(estado: string): string {
     const mapa: Record<string, string> = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', corriendo: 'Corriendo' };
+    return mapa[estado] ?? estado;
+  }
+
+  textoEstadoAprendizaje(estado: string): string {
+    const mapa: Record<string, string> = { borrador: 'Borrador', revisar: 'A revisar', listo: 'Listo', aprobado: 'Aprobado' };
     return mapa[estado] ?? estado;
   }
 
