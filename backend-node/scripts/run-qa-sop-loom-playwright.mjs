@@ -251,6 +251,24 @@ async function ejecutarPaso(paso, rutaObjetivo, caso, datos) {
     const valor = texto(datos[clave]);
     const campo = page.locator(selectorPaso).first();
     await campo.waitFor({ state: 'visible' });
+
+    // Un <select> no se completa escribiendo: hay que elegir una opción. Si el
+    // valor del caso no está entre las opciones se dice cuáles hay, en vez de
+    // dejar el campo con otro valor y fallar recién en la verificación.
+    const etiqueta = await campo.evaluate((el) => el.tagName.toLowerCase());
+    if (etiqueta === 'select') {
+      try {
+        await campo.selectOption(valor);
+      } catch {
+        const opciones = (await campo.locator('option').allTextContents())
+          .map((opcion) => opcion.trim())
+          .filter(Boolean);
+        throw new Error(`El campo ${clave} no tiene la opción "${valor}". Opciones disponibles: ${opciones.join(' | ')}`);
+      }
+      await aplicarEspera(paso);
+      return `Eligió ${clave || selectorPaso} = ${valor}`;
+    }
+
     await campo.fill(valor);
     const escrito = await campo.inputValue();
     if (escrito !== valor) {

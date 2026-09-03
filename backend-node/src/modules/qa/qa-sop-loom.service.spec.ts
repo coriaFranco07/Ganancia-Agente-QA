@@ -86,6 +86,8 @@ async function compilar(entrada: {
   ordenManualPasos?: string[];
   reglasValidacion?: Record<string, unknown>[];
   capturasPorRuta?: Record<string, string>;
+  /** Rutas de pantallas secundarias que ya fueron inspeccionadas. */
+  rutasExtra?: string[];
 }) {
   const casos = entrada.casos ?? [casoPantalla3('QA-P3-ALTA-27345678-20260415', CASO_COMPLETO)];
   const reglasStub = entrada.reglasValidacion
@@ -103,6 +105,7 @@ async function compilar(entrada: {
       pasos: Record<string, unknown>[];
       casosSeleccionados: string[];
       inspeccion: InspeccionPantalla | null;
+      inspeccionesExtra?: InspeccionPantalla[];
       consideracionesDecididas?: Record<string, unknown>[];
       ordenManualPasos?: string[];
     }): Promise<{
@@ -113,6 +116,7 @@ async function compilar(entrada: {
       consideraciones: Array<Record<string, unknown>>;
       pendientes: string[];
       recorrido: Array<Record<string, unknown>>;
+      inspecciones: Array<Record<string, unknown>>;
     }>;
   }).compilar({
     ruta: entrada.ruta,
@@ -120,6 +124,7 @@ async function compilar(entrada: {
     pasos: entrada.pasos.map((accion, index) => ({ orden: index + 1, accion })),
     casosSeleccionados: entrada.seleccionados ?? [],
     inspeccion: inspeccionDePrueba(entrada.ruta),
+    inspeccionesExtra: (entrada.rutasExtra ?? []).map((ruta) => inspeccionDePrueba(ruta)),
     consideracionesDecididas: entrada.consideracionesDecididas,
     ordenManualPasos: entrada.ordenManualPasos,
   });
@@ -918,7 +923,7 @@ describe('QaSopLoomService recorrido de pantallas', () => {
     expect(porRuta.get('/qa/pantalla-3')?.['pasos']).toBe(0);
   });
 
-  it('avisa como pendiente que el salto entre pantallas todavia no se automatiza', async () => {
+  it('avisa que la pantalla secundaria no tiene pasos cuando no se pudo compilar', async () => {
     const resultado = await compilar({
       ruta: '/qa/pantalla-1',
       pasos: [
@@ -928,7 +933,7 @@ describe('QaSopLoomService recorrido de pantallas', () => {
       ],
     });
 
-    expect(resultado.pendientes.join(' ')).toMatch(/salto entre pantallas todav[ií]a no se automatiza/i);
+    expect(resultado.pendientes.join(' ')).toMatch(/no ejecuta ning[uú]n paso ah[ií]/i);
   });
 
   it('incluye la pantalla compilada aunque el texto del SOP no la nombre', async () => {
@@ -977,5 +982,91 @@ describe('QaSopLoomService recorrido de pantallas', () => {
     });
     const pantalla3SinFoto = sinFotoPrevia.recorrido.find((pantalla) => pantalla['ruta'] === '/qa/pantalla-3');
     expect(pantalla3SinFoto?.['inspeccion_id']).toBe('');
+  });
+});
+
+describe('QaSopLoomService compilacion multi-pantalla', () => {
+  /** Un SOP que arranca en Legajo de Ganancias y sigue en Legajo de Cliente. */
+  const PASOS_SALTO = [
+    'Abro Pantalla 1 y completo el legajo.',
+    'Toco Siguiente y eso me lleva a Pantalla 3.',
+    'Completo el cliente y guardo el caso.',
+  ];
+
+  const AMBAS = { ruta: '/qa/pantalla-1', pasos: PASOS_SALTO, rutasExtra: ['/qa/pantalla-3'] };
+
+  function navegaciones(resultado: { pasos_ejecutables: Array<Record<string, unknown>> }): unknown[] {
+    return resultado.pasos_ejecutables.filter((paso) => paso['tipo'] === 'navegar').map((paso) => paso['valor']);
+  }
+
+  it('emite un navegar por pantalla, en el orden en que el SOP las recorre', async () => {
+    const resultado = await compilar(AMBAS);
+
+    expect(navegaciones(resultado)).toEqual(['/qa/pantalla-1', '/qa/pantalla-3']);
+  });
+
+  it('resuelve los campos de cada tramo contra los selectores de su propia pantalla', async () => {
+    const resultado = await compilar(AMBAS);
+
+    const selectores = resultado.pasos_ejecutables
+      .filter((paso) => paso['tipo'] === 'completar')
+      .map((paso) => paso['selector']);
+    expect(selectores).toContain('[data-testid="qa-case-legajo-input"]');
+    expect(selectores).toContain('[data-testid="qa-screen3-cliente-input"]');
+  });
+
+  it('el campo de la pantalla secundaria queda despues de haber navegado a ella', async () => {
+    const resultado = await compilar(AMBAS);
+
+    const tipos = resultado.pasos_ejecutables.map((paso) => `${paso['tipo']}:${paso['selector'] ?? paso['valor']}`);
+    const navegoAPantalla3 = tipos.indexOf('navegar:/qa/pantalla-3');
+    const completoCliente = tipos.indexOf('completar:[data-testid="qa-screen3-cliente-input"]');
+    expect(navegoAPantalla3).toBeGreaterThanOrEqual(0);
+    expect(completoCliente).toBeGreaterThan(navegoAPantalla3);
+  });
+
+  it('marca cubiertas las dos pantallas del recorrido, con sus propios conteos', async () => {
+    const resultado = await compilar(AMBAS);
+
+    const porRuta = new Map(resultado.recorrido.map((pantalla) => [pantalla['ruta'], pantalla]));
+    expect(porRuta.get('/qa/pantalla-1')?.['cubierta']).toBe(true);
+    expect(porRuta.get('/qa/pantalla-3')?.['cubierta']).toBe(true);
+    expect(Number(porRuta.get('/qa/pantalla-3')?.['pasos'])).toBeGreaterThan(0);
+  });
+
+  it('devuelve una inspeccion por pantalla compilada, para poder revalidarlas todas antes de correr', async () => {
+    const resultado = await compilar(AMBAS);
+
+    expect(resultado.inspecciones.map((item) => item['ruta'])).toEqual(['/qa/pantalla-1', '/qa/pantalla-3']);
+  });
+
+  it('sin inspeccion de la pantalla secundaria no compila ese tramo y lo deja pendiente', async () => {
+    const resultado = await compilar({ ruta: '/qa/pantalla-1', pasos: PASOS_SALTO });
+
+    expect(navegaciones(resultado)).toEqual(['/qa/pantalla-1']);
+    expect(resultado.pendientes.join(' ')).toMatch(/todav[ií]a no se inspeccion/i);
+  });
+
+  it('avisa cuando el caso de la pantalla de entrada no trae los datos que pide la secundaria', async () => {
+    const resultado = await compilar({
+      ...AMBAS,
+      casos: [{
+        id: 'QA-GAN-SOLO-LEGAJO',
+        activo: true,
+        origen: { tipo: 'formulario_qa_pantalla_1' },
+        contexto: { empleado: { legajo: '5' } },
+      }],
+    });
+
+    const pendientes = resultado.pendientes.join(' ');
+    expect(pendientes).toMatch(/no traen/i);
+    expect(pendientes).toMatch(/cliente/i);
+  });
+
+  it('un flujo de una sola pantalla sigue compilando un unico tramo', async () => {
+    const resultado = await compilar({ ruta: '/qa/pantalla-3', pasos: PASOS_PANTALLA_3 });
+
+    expect(navegaciones(resultado)).toEqual(['/qa/pantalla-3']);
+    expect(resultado.inspecciones).toHaveLength(1);
   });
 });

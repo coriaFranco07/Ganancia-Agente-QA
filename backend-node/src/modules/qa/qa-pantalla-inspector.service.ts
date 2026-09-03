@@ -131,6 +131,23 @@ export class QaPantallaInspectorService {
   }
 
   /**
+   * Última inspección activa de una ruta, sin exigir que conserve la captura.
+   * Es lo que permite compilar un SOP que salta a una pantalla secundaria:
+   * para resolver sus selectores alcanza con la navegación observada, la foto
+   * es aparte. Devuelve null si esa ruta nunca se inspeccionó — el compilador
+   * lo convierte en pendiente en vez de inventar selectores.
+   */
+  async ultimaDeRuta(rutaEntrada: unknown): Promise<InspeccionPantalla | null> {
+    const ruta = this.normalizarRuta(rutaEntrada);
+    if (!ruta) return null;
+    const doc = await this.inspecciones
+      .findOne({ ruta, activa: { $ne: false } })
+      .sort({ inspeccionada_en: -1 })
+      .lean<QaInspeccionPantalla>();
+    return doc ? this.serializar(doc) : null;
+  }
+
+  /**
    * Id de la inspección más reciente de una ruta que todavía tiene la captura
    * en disco (las viejas se purgan). Sirve para mostrar una foto de una
    * pantalla que el SOP nombra aunque el flujo actual no la haya inspeccionado

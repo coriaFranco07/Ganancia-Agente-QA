@@ -15,7 +15,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
         [opened]="!esMobile"
         [fixedInViewport]="esMobile">
         <div class="brand">
-          <img src="/assets/logo-esueldos.png" alt="e-Sueldos" (error)="logoRoto = true" [class.oculto]="logoRoto" />
+          <img src="/assets/logo-esueldos-blanco.png" alt="e-Sueldos" (error)="logoRoto = true" [class.oculto]="logoRoto" />
           <div *ngIf="logoRoto" class="brand-fallback">
             <mat-icon>cloud</mat-icon>
             <span>e-Sueldos</span>
@@ -154,18 +154,18 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
   `,
   styles: [`
     .layout-shell { height: 100vh; background: #f8fafc; }
-    .sidebar { width: 190px; border-right: 1px solid #e2e8f0; background: #ffffff; }
+    .sidebar { width: 190px; border-right: 1px solid #1d4bd6; background: #2458fb; }
     .brand { padding: 14px 12px 18px; }
-    .brand img { display: block; width: 138px; max-width: 100%; border-radius: 9px; box-shadow: 0 10px 28px rgba(37, 99, 235, 0.16); }
+    .brand img { display: block; width: 138px; max-width: 100%; }
     .brand img.oculto { display: none; }
-    .brand-fallback { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: #2563eb; color: #ffffff; font-size: 18px; font-weight: 900; box-shadow: 0 10px 28px rgba(37, 99, 235, 0.16); }
+    .brand-fallback { display: inline-flex; align-items: center; gap: 8px; padding: 4px 2px; color: #ffffff; font-size: 18px; font-weight: 900; }
     .menu { display: flex; flex-direction: column; gap: 6px; padding: 0 8px; }
     .menu-link {
       width: 100%;
       height: 42px;
       justify-content: flex-start;
       border-radius: 12px;
-      color: #111827;
+      color: rgba(255, 255, 255, .82) !important;
       font-size: 14px;
       font-weight: 650;
       letter-spacing: -0.01em;
@@ -175,9 +175,9 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
     .menu-link span {
       line-height: 1;
     }
-    .menu-link mat-icon { margin-right: 10px; color: #0f1b3d; font-size: 20px; width: 20px; height: 20px; }
-    .menu-link.activo { background: #eff6ff; color: #2563eb; }
-    .menu-link.activo mat-icon { color: #2563eb; }
+    .menu-link mat-icon { margin-right: 10px; color: rgba(255, 255, 255, .7); font-size: 20px; width: 20px; height: 20px; }
+    .menu-link.activo { background: rgba(255, 255, 255, .16); color: #ffffff !important; }
+    .menu-link.activo mat-icon { color: #ffffff; }
     .menu-toggle .chevron {
       margin-left: auto;
       margin-right: 0;
@@ -186,26 +186,36 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
     .menu-toggle.abierto .chevron { transform: rotate(180deg); }
     .submenu {
       display: grid;
-      gap: 4px;
-      margin: -2px 0 4px 34px;
-      padding-left: 10px;
-      border-left: 1px solid #dbeafe;
+      gap: 6px;
+      margin: 4px 0 8px 34px;
+      padding: 2px 0 2px 14px;
+      border-left: 1px solid rgba(255, 255, 255, .22);
     }
     .submenu-link {
       width: 100%;
-      height: 34px;
+      height: auto;
+      min-height: 34px;
+      padding: 8px 12px;
       justify-content: flex-start;
       border-radius: 10px;
-      color: #475569;
-      font-size: 12px;
-      font-weight: 850;
+      color: rgba(255, 255, 255, .68) !important;
+      font-size: 12.5px;
+      font-weight: 800;
+      line-height: 1.35;
+      white-space: normal;
+      text-align: left;
+      letter-spacing: -0.005em;
+    }
+    .submenu-link .mdc-button__label {
+      white-space: normal;
+      line-height: 1.35;
     }
     .submenu-link.activo {
-      background: #eff6ff;
-      color: #2563eb;
+      background: rgba(255, 255, 255, .16);
+      color: #ffffff !important;
     }
-    .version { position: absolute; left: 20px; bottom: 20px; color: #64748b; font-size: 12px; line-height: 1.35; }
-    .version b { color: #0f172a; }
+    .version { position: static; margin: 18px 20px 20px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, .18); color: rgba(255, 255, 255, .55); font-size: 12px; line-height: 1.35; }
+    .version b { color: #ffffff; }
     .contenido { min-width: 0; background: #f8fafc; }
     .toolbar { position: sticky; top: 0; z-index: 20; min-height: 52px; height: 52px; padding: 0 24px; border-bottom: 1px solid #e2e8f0; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(10px); }
     .titulo { font-size: 16px; font-weight: 800; color: #0f172a; }
@@ -220,7 +230,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
       .usuario { display: none; }
       .logout span { display: none; }
       .sidebar { width: min(82vw, 300px); }
-      .version { position: static; margin: 28px 20px 20px; padding-top: 18px; border-top: 1px solid #e2e8f0; }
+      .version { position: static; margin: 28px 20px 20px; padding-top: 18px; border-top: 1px solid rgba(255, 255, 255, .22); }
     }
   `],
 })

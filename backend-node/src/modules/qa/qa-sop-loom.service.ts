@@ -114,6 +114,11 @@ interface Compilacion {
   consideraciones: Consideracion[];
   pendientes: string[];
   inspeccion: InspeccionPantalla | null;
+  /**
+   * Todas las inspecciones de las que dependen los selectores del plan, una por
+   * pantalla del recorrido que se pudo compilar. La primera es la de entrada.
+   */
+  inspecciones: InspeccionPantalla[];
   recorrido: PantallaRecorrida[];
 }
 
@@ -206,6 +211,7 @@ export class QaSopLoomService {
       pasos,
       casosSeleccionados,
       inspeccion,
+      inspeccionesExtra: await this.inspeccionesDeSecundarias(descripcion, pasos, ruta),
       consideracionesDecididas: this.arrayObjetos(entrada['consideraciones']),
       ordenManualPasos,
     });
@@ -265,6 +271,9 @@ export class QaSopLoomService {
       casos_seleccionados: casosSeleccionados,
       orden_manual_pasos: ordenManualPasos,
       inspeccion_navegacion: inspeccion,
+      // Una por pantalla del recorrido que el plan realmente ejecuta. Se
+      // revalidan todas antes de correr el agente.
+      inspecciones_navegacion: compilacion.inspecciones,
       // Guardar de nuevo un aprendizaje dado de baja lo reactiva.
       activo: true,
     };
@@ -342,6 +351,8 @@ export class QaSopLoomService {
         ? {
           inspeccion_id: this.texto(inspeccion['id']),
           hash_navegacion: this.texto(inspeccion['hash']),
+          // Cubre también las pantallas secundarias del recorrido.
+          hash_navegacion_conjunto: this.hashDeInspecciones(this.inspeccionesDelAprendizaje(doc)),
         }
         : {}),
     };
@@ -363,6 +374,7 @@ export class QaSopLoomService {
               tipo: 'doble_firma',
               inspeccion_id: this.texto(inspeccion['id']),
               hash_navegacion: this.texto(inspeccion['hash']),
+              hash_navegacion_conjunto: this.hashDeInspecciones(this.inspeccionesDelAprendizaje(doc)),
               alcance: ['negocio', 'tecnica'],
             }
             : null,
@@ -475,6 +487,17 @@ export class QaSopLoomService {
     if (this.texto(aprobacion['hash_navegacion']) !== this.texto(inspeccionAprobada['hash'])) {
       throw new BadRequestException('La inspección navegada no coincide con la aprobación técnica vigente.');
     }
+    // Un flujo multi-pantalla depende de varias inspecciones: si cambió alguna
+    // de las secundarias, la firma técnica ya no cubre el plan que se va a
+    // correr. Los aprendizajes viejos no guardan el conjunto y siguen usando
+    // solo la comprobación de arriba.
+    const inspeccionesDelPlan = this.inspeccionesDelAprendizaje(doc);
+    const conjuntoAprobado = this.texto(aprobacion['hash_navegacion_conjunto']);
+    if (conjuntoAprobado && conjuntoAprobado !== this.hashDeInspecciones(inspeccionesDelPlan)) {
+      throw new BadRequestException(
+        'Las pantallas del recorrido cambiaron después de aprobarse. Volvé a revisar el flujo y aprobarlo.',
+      );
+    }
 
     const activo = this.procesos.get(doc.id);
     if (activo && !activo.killed) {
@@ -482,14 +505,20 @@ export class QaSopLoomService {
     }
 
     if (!this.inspector) throw new InternalServerErrorException('El inspector de pantallas no está disponible.');
-    const revalidacion = await this.inspector.revalidar(doc.inspeccion_navegacion, cookieHeader);
-    if (!revalidacion.coincide) {
-      throw new BadRequestException({
-        message: 'La pantalla cambió desde la aprobación. Inspeccioná, guardá y aprobá nuevamente el flujo.',
-        cambios: revalidacion.cambios,
-        hash_anterior: revalidacion.hash_anterior,
-        hash_actual: revalidacion.hash_actual,
-      });
+    // Se revalida cada pantalla del recorrido, no solo la de entrada: operar
+    // con los selectores viejos de una pantalla intermedia es igual de ciego.
+    for (const inspeccionPlan of inspeccionesDelPlan) {
+      const revalidacion = await this.inspector.revalidar(inspeccionPlan, cookieHeader);
+      if (!revalidacion.coincide) {
+        const rutaCambiada = this.texto(inspeccionPlan['ruta']);
+        throw new BadRequestException({
+          message: `La pantalla ${rutaCambiada || 'del flujo'} cambió desde la aprobación. Inspeccioná, guardá y aprobá nuevamente el flujo.`,
+          ruta: rutaCambiada,
+          cambios: revalidacion.cambios,
+          hash_anterior: revalidacion.hash_anterior,
+          hash_actual: revalidacion.hash_actual,
+        });
+      }
     }
 
     // Antes de abrir un navegador: el set de casos aprobado tiene que seguir
@@ -699,6 +728,11 @@ export class QaSopLoomService {
     pasos: Record<string, unknown>[];
     casosSeleccionados: string[];
     inspeccion: InspeccionPantalla | null;
+    /**
+     * Inspecciones de las pantallas secundarias que el SOP nombra. Sin ellas
+     * el tramo de esa pantalla queda pendiente en vez de compilarse a ciegas.
+     */
+    inspeccionesExtra?: InspeccionPantalla[];
     consideracionesDecididas?: Record<string, unknown>[];
     ordenManualPasos?: string[];
   }): Promise<Compilacion> {
@@ -720,7 +754,8 @@ export class QaSopLoomService {
       consideraciones: guardas.consideraciones,
       pendientes: [],
       inspeccion: entrada.inspeccion,
-      recorrido: await this.recorridoDePantallas(mencionadas, null, 0, 0),
+      inspecciones: [],
+      recorrido: await this.recorridoDePantallas(mencionadas, null, new Map()),
     };
 
     if (!entrada.ruta) {
@@ -732,10 +767,10 @@ export class QaSopLoomService {
         pendientes: ['Primero inspeccioná la pantalla real del sandbox para obtener rutas y selectores.'],
       };
     }
-    const inspeccion = entrada.inspeccion;
-    const resolucion = this.pantallaDesdeNavegacion(entrada.ruta, inspeccion);
-    const pantallaBase = resolucion.pantalla;
-    if (!pantallaBase) {
+    const inspeccionEntrada = entrada.inspeccion;
+    const resolucion = this.pantallaDesdeNavegacion(entrada.ruta, inspeccionEntrada);
+    const pantallaEntradaBase = resolucion.pantalla;
+    if (!pantallaEntradaBase) {
       return {
         ...vacia,
         pendientes: resolucion.pendientes,
@@ -744,22 +779,193 @@ export class QaSopLoomService {
     // Las reglas de validación (obligatorio/formato) que una persona haya
     // ajustado pisan el default del catálogo, por pantalla o global (§ reglas).
     const reglas = this.reglasValidacion ? await this.reglasValidacion.listarResueltas() : [];
-    const pantalla = aplicarReglasCampos(pantallaBase, reglas);
+    const pantallaEntrada = aplicarReglasCampos(pantallaEntradaBase, reglas);
 
     const pendientes: string[] = [...resolucion.pendientes, ...guardas.pendientes];
-    const pasosEjecutables: PasoEjecutable[] = [];
-    const camposCubiertos = new Map<string, CampoCatalogo>();
-    const accionesUsadas = new Set<string>();
 
-    // Los datos salen de los casos QA cargados en la propia pantalla.
+    // Selectores disponibles por ruta: la inspección de entrada más las de las
+    // pantallas secundarias que el SOP nombra.
+    const inspeccionesPorRuta = new Map<string, InspeccionPantalla>();
+    for (const item of [inspeccionEntrada, ...(entrada.inspeccionesExtra ?? [])]) {
+      if (item) inspeccionesPorRuta.set(this.normalizarRuta(item.ruta), item);
+    }
+
+    // Los datos salen de los casos QA de la pantalla de entrada: es la que abre
+    // el flujo y la que tiene declarada la fuente de casos.
     const { casos, pendientes: pendientesCasos } = await this.casosDeLaPantalla(
-      pantalla,
+      pantallaEntrada,
       entrada.casosSeleccionados,
     );
     pendientes.push(...pendientesCasos);
 
-    pasosEjecutables.push({
-      orden: 1,
+    const pasosEjecutables: PasoEjecutable[] = [];
+    const campos: Record<string, unknown>[] = [];
+    const acciones = new Set<string>();
+    const inspeccionesUsadas: InspeccionPantalla[] = [];
+    const cubiertas = new Map<string, { pasos: number; campos: number }>();
+    // Claves que pide una pantalla distinta a la de entrada: los casos de la
+    // pantalla de entrada no tienen por qué traerlas.
+    const clavesSecundarias = new Set<string>();
+    let escribeAlgo = false;
+
+    for (const tramo of this.tramosDelSop(entrada.pasos, pantallaEntradaBase)) {
+      const rutaTramo = this.normalizarRuta(tramo.pantalla.ruta);
+      const esEntrada = rutaTramo === this.normalizarRuta(pantallaEntradaBase.ruta);
+      const inspeccionTramo = inspeccionesPorRuta.get(rutaTramo);
+
+      if (!inspeccionTramo) {
+        pendientes.push(
+          `El SOP sigue en ${tramo.pantalla.nombre} (${tramo.pantalla.ruta}), pero esa pantalla todavía no se inspeccionó: sin navegación real no se pueden resolver sus selectores.`,
+        );
+        continue;
+      }
+
+      // La pantalla de entrada ya se resolvió arriba; repetirlo duplicaría sus
+      // pendientes.
+      let pantallaTramo: PantallaCatalogo | null = pantallaEntrada;
+      if (!esEntrada) {
+        const resuelta = this.pantallaDesdeNavegacion(tramo.pantalla.ruta, inspeccionTramo);
+        pendientes.push(...resuelta.pendientes);
+        pantallaTramo = resuelta.pantalla ? aplicarReglasCampos(resuelta.pantalla, reglas) : null;
+      }
+      if (!pantallaTramo) continue;
+
+      const emitido = this.compilarTramo(pantallaTramo, tramo.pasos, inspeccionTramo, pendientes);
+      if (emitido.pasos.length === 0) continue;
+
+      // El orden manual se aplica dentro del tramo: un campo de la pantalla 3
+      // no puede quedar antes de haber navegado a la pantalla 3.
+      const ordenados = this.aplicarOrdenManual(emitido.pasos, entrada.ordenManualPasos ?? []);
+      pasosEjecutables.push(...ordenados);
+
+      for (const campo of emitido.campos) {
+        campos.push({
+          nombre: campo.clave,
+          etiqueta: campo.etiqueta,
+          tipo: campo.tipo,
+          obligatorio: campo.obligatorio,
+          testid: campo.testid,
+          fuente: {
+            tipo: 'navegacion',
+            ref: inspeccionTramo.id,
+            hash: inspeccionTramo.hash,
+          },
+        });
+        if (!esEntrada) clavesSecundarias.add(campo.clave);
+      }
+      for (const accion of emitido.acciones) acciones.add(accion);
+      escribeAlgo = escribeAlgo || emitido.escribe;
+
+      const previo = cubiertas.get(rutaTramo) ?? { pasos: 0, campos: 0 };
+      cubiertas.set(rutaTramo, {
+        pasos: previo.pasos + ordenados.length,
+        campos: previo.campos + emitido.campos.length,
+      });
+      if (!inspeccionesUsadas.some((item) => item.id === inspeccionTramo.id)) {
+        inspeccionesUsadas.push(inspeccionTramo);
+      }
+    }
+
+    pasosEjecutables.forEach((paso, indice) => {
+      paso.orden = indice + 1;
+    });
+
+    if (!escribeAlgo) {
+      pendientes.push(
+        'El flujo no incluye ninguna accion que guarde. Indicá en el texto qué botón cierra la operación.',
+      );
+    }
+
+    // Un `completar` de una pantalla secundaria puede pedir un dato que el caso
+    // de la pantalla de entrada no trae. Se avisa al compilar, no en la corrida.
+    const sinDato = new Set<string>();
+    for (const caso of casos) {
+      for (const clave of clavesSecundarias) {
+        if (!this.texto(caso.datos[clave])) sinDato.add(clave);
+      }
+    }
+    if (sinDato.size > 0) {
+      pendientes.push(
+        `Los casos de ${pantallaEntrada.nombre} no traen ${Array.from(sinDato).join(', ')}, que el plan necesita para completar otra pantalla del recorrido.`,
+      );
+    }
+
+    const recorrido = await this.recorridoDePantallas(
+      mencionadas,
+      pantallaEntrada,
+      cubiertas,
+      inspeccionEntrada.id,
+    );
+    pendientes.push(...this.pendientesDeRecorrido(recorrido));
+
+    return {
+      pantalla: pantallaEntrada,
+      campos,
+      acciones: Array.from(acciones),
+      pasos_ejecutables: pasosEjecutables,
+      casos,
+      consideraciones: guardas.consideraciones,
+      pendientes,
+      inspeccion: inspeccionEntrada,
+      inspecciones: inspeccionesUsadas,
+      recorrido,
+    };
+  }
+
+  /**
+   * Parte los pasos del SOP en tramos, uno por pantalla. Un paso se resuelve
+   * contra la pantalla vigente —"toco Siguiente" pasa en la pantalla donde
+   * estás, no en la que te lleva— y recién el paso siguiente arranca en la
+   * pantalla que ese paso nombró.
+   */
+  private tramosDelSop(
+    pasos: Record<string, unknown>[],
+    entrada: PantallaCatalogo,
+  ): Array<{ pantalla: PantallaCatalogo; pasos: Record<string, unknown>[] }> {
+    const tramos: Array<{ pantalla: PantallaCatalogo; pasos: Record<string, unknown>[] }> = [];
+    let actual = entrada;
+    let acumulados: Record<string, unknown>[] = [];
+
+    for (const paso of pasos) {
+      acumulados.push(paso);
+      const texto = this.texto(paso['accion'] ?? paso['texto'] ?? paso['nombre']);
+      if (!texto) continue;
+
+      // Si el paso nombra varias pantallas, manda la última distinta a la
+      // vigente: "desde Pantalla 1 voy a Pantalla 3" termina en Pantalla 3.
+      const destino = [...pantallasMencionadas(texto)]
+        .reverse()
+        .find((item) => this.normalizarRuta(item.pantalla.ruta) !== this.normalizarRuta(actual.ruta));
+      if (!destino) continue;
+
+      tramos.push({ pantalla: actual, pasos: acumulados });
+      acumulados = [];
+      actual = destino.pantalla;
+    }
+
+    if (acumulados.length > 0 || tramos.length === 0) {
+      tramos.push({ pantalla: actual, pasos: acumulados });
+    }
+    return tramos;
+  }
+
+  /**
+   * Pasos ejecutables de una sola pantalla: abrirla, completar los campos que
+   * el SOP nombra (más los obligatorios que no nombró), disparar las acciones y
+   * verificar el resultado si el tramo escribe.
+   */
+  private compilarTramo(
+    pantalla: PantallaCatalogo,
+    pasosDelSop: Record<string, unknown>[],
+    inspeccion: InspeccionPantalla,
+    pendientes: string[],
+  ): { pasos: PasoEjecutable[]; campos: CampoCatalogo[]; acciones: string[]; escribe: boolean } {
+    const pasos: PasoEjecutable[] = [];
+    const camposCubiertos = new Map<string, CampoCatalogo>();
+    const accionesUsadas = new Set<string>();
+
+    pasos.push({
+      orden: 0,
       tipo: 'navegar',
       nombre: `Abrir ${pantalla.nombre}`,
       escribe: false,
@@ -775,8 +981,8 @@ export class QaSopLoomService {
     const emitirCampo = (campo: CampoCatalogo, origenPaso: number | undefined, alias: string): void => {
       if (camposCubiertos.has(campo.clave)) return;
       camposCubiertos.set(campo.clave, campo);
-      pasosEjecutables.push({
-        orden: pasosEjecutables.length + 1,
+      pasos.push({
+        orden: 0,
         tipo: 'completar',
         nombre: `Completar ${campo.etiqueta}`,
         escribe: false,
@@ -795,8 +1001,8 @@ export class QaSopLoomService {
     const emitirAccion = (accion: AccionCatalogo, origenPaso: number | undefined, alias: string): void => {
       if (accionesUsadas.has(accion.clave)) return;
       accionesUsadas.add(accion.clave);
-      pasosEjecutables.push({
-        orden: pasosEjecutables.length + 1,
+      pasos.push({
+        orden: 0,
         tipo: 'click',
         nombre: accion.etiqueta,
         escribe: accion.escribe,
@@ -812,7 +1018,7 @@ export class QaSopLoomService {
       });
     };
 
-    for (const paso of entrada.pasos) {
+    for (const paso of pasosDelSop) {
       const texto = this.texto(paso['accion'] ?? paso['texto'] ?? paso['nombre']);
       if (!texto) continue;
       const orden = Number(paso['orden']) || undefined;
@@ -833,13 +1039,26 @@ export class QaSopLoomService {
       }
     }
 
+    // Un tramo que no toca ningún campo ni acción no aporta nada: se descarta
+    // en vez de dejar un `navegar` suelto. El motivo importa y son dos muy
+    // distintos: que la pantalla no exponga los data-testid que el catálogo
+    // declara, o que el SOP simplemente no nombre nada de esa pantalla.
+    if (camposCubiertos.size === 0 && accionesUsadas.size === 0) {
+      pendientes.push(
+        pantalla.campos.length === 0 && pantalla.acciones.length === 0
+          ? `${pantalla.nombre} (${pantalla.ruta}) no expone ninguno de los data-testid que declara el catálogo, así que todavía no se puede automatizar. Hay que instrumentar la pantalla.`
+          : `El SOP nombra ${pantalla.nombre} (${pantalla.ruta}) pero no menciona ningún campo ni acción de esa pantalla, así que el plan no hace nada ahí.`,
+      );
+      return { pasos: [], campos: [], acciones: [], escribe: false };
+    }
+
     // Un campo obligatorio que el SOP no nombro igual hay que completarlo, y
     // siempre antes del primer paso que escribe.
     const faltantesObligatorios = pantalla.campos.filter(
       (campo) => campo.obligatorio && !camposCubiertos.has(campo.clave),
     );
     if (faltantesObligatorios.length > 0) {
-      const antesDe = pasosEjecutables.findIndex((paso) => paso.tipo === 'click' && paso.escribe);
+      const antesDe = pasos.findIndex((paso) => paso.tipo === 'click' && paso.escribe);
       const insertados: PasoEjecutable[] = faltantesObligatorios.map((campo) => {
         camposCubiertos.set(campo.clave, campo);
         return {
@@ -856,13 +1075,13 @@ export class QaSopLoomService {
           },
         };
       });
-      const posicion = antesDe >= 0 ? antesDe : pasosEjecutables.length;
-      pasosEjecutables.splice(posicion, 0, ...insertados);
+      const posicion = antesDe >= 0 ? antesDe : pasos.length;
+      pasos.splice(posicion, 0, ...insertados);
     }
 
-    const escribeAlgo = pasosEjecutables.some((paso) => paso.tipo === 'click' && paso.escribe);
-    if (escribeAlgo && pantalla.verificacion) {
-      pasosEjecutables.push({
+    const escribe = pasos.some((paso) => paso.tipo === 'click' && paso.escribe);
+    if (escribe && pantalla.verificacion) {
+      pasos.push({
         orden: 0,
         tipo: 'verificar',
         nombre: 'Verificar mensaje de resultado',
@@ -879,8 +1098,8 @@ export class QaSopLoomService {
         },
       });
     }
-    if (escribeAlgo && pantalla.fuente_casos?.prefijo_fila) {
-      pasosEjecutables.push({
+    if (escribe && pantalla.fuente_casos?.prefijo_fila) {
+      pasos.push({
         orden: 0,
         tipo: 'verificar_fila',
         nombre: 'Verificar que el caso aparezca en el listado',
@@ -894,52 +1113,11 @@ export class QaSopLoomService {
       });
     }
 
-    // Reordena solo los pasos `completar` según lo que una persona haya
-    // arrastrado en el Plan ejecutable (ej: CUIL antes que DNI). Los demás
-    // pasos (navegar, click, verificar) conservan su posición.
-    const pasosOrdenados = this.aplicarOrdenManual(pasosEjecutables, entrada.ordenManualPasos ?? []);
-    pasosOrdenados.forEach((paso, indice) => {
-      paso.orden = indice + 1;
-    });
-
-    if (!escribeAlgo) {
-      pendientes.push(
-        'El flujo no incluye ninguna accion que guarde. Indicá en el texto qué botón cierra la operación.',
-      );
-    }
-
-    const campos = Array.from(camposCubiertos.values()).map((campo) => ({
-      nombre: campo.clave,
-      etiqueta: campo.etiqueta,
-      tipo: campo.tipo,
-      obligatorio: campo.obligatorio,
-      testid: campo.testid,
-      fuente: {
-        tipo: 'navegacion',
-        ref: inspeccion.id,
-        hash: inspeccion.hash,
-      },
-    }));
-
-    const recorrido = await this.recorridoDePantallas(
-      mencionadas,
-      pantalla,
-      pasosOrdenados.length,
-      campos.length,
-      inspeccion.id,
-    );
-    pendientes.push(...this.pendientesDeRecorrido(recorrido));
-
     return {
-      pantalla,
-      campos,
+      pasos,
+      campos: Array.from(camposCubiertos.values()),
       acciones: Array.from(accionesUsadas),
-      pasos_ejecutables: pasosOrdenados,
-      casos,
-      consideraciones: guardas.consideraciones,
-      pendientes,
-      inspeccion,
-      recorrido,
+      escribe,
     };
   }
 
@@ -954,6 +1132,49 @@ export class QaSopLoomService {
   }
 
   /**
+   * Última inspección de cada pantalla instrumentada que el SOP nombra además
+   * de la de entrada. Si alguna nunca se inspeccionó no se devuelve nada para
+   * ella: `compilar` deja ese tramo pendiente en vez de inventar selectores.
+   */
+  private async inspeccionesDeSecundarias(
+    descripcion: string,
+    pasos: Record<string, unknown>[],
+    rutaEntrada: string,
+  ): Promise<InspeccionPantalla[]> {
+    if (!this.inspector) return [];
+    const entrada = this.normalizarRuta(rutaEntrada);
+    const secundarias = pantallasMencionadas(this.textoDelSop(descripcion, pasos))
+      .map((item) => item.pantalla)
+      .filter((pantalla) => pantalla.instrumentada && this.normalizarRuta(pantalla.ruta) !== entrada);
+
+    const encontradas: InspeccionPantalla[] = [];
+    for (const pantalla of secundarias) {
+      const inspeccion = await this.inspector.ultimaDeRuta(pantalla.ruta).catch(() => null);
+      if (inspeccion) encontradas.push(inspeccion);
+    }
+    return encontradas;
+  }
+
+  /**
+   * Inspecciones de las que dependen los selectores del plan. Los aprendizajes
+   * guardados antes del soporte multi-pantalla solo tienen la de entrada.
+   */
+  private inspeccionesDelAprendizaje(doc: QaSopLoomLean): Record<string, unknown>[] {
+    const varias = this.arrayObjetos(doc.inspecciones_navegacion);
+    if (varias.length > 0) return varias;
+    const unica = this.objeto(doc.inspeccion_navegacion);
+    return Object.keys(unica).length > 0 ? [unica] : [];
+  }
+
+  /** Huella del conjunto de pantallas del plan, para que la firma técnica las cubra a todas. */
+  private hashDeInspecciones(inspecciones: Record<string, unknown>[]): string {
+    return this.hash(inspecciones.map((item) => ({
+      ruta: this.normalizarRuta(this.texto(item['ruta'])),
+      hash: this.texto(item['hash']),
+    })));
+  }
+
+  /**
    * Arma el recorrido de pantallas del flujo. La pantalla que el plan compila
    * va primera aunque el texto no la nombre (puede venir de la ruta elegida a
    * mano) y queda marcada como cubierta; el resto son pantallas que el SOP
@@ -962,8 +1183,7 @@ export class QaSopLoomService {
   private async recorridoDePantallas(
     mencionadas: Array<{ pantalla: PantallaCatalogo }>,
     compilada: PantallaCatalogo | null,
-    pasos: number,
-    campos: number,
+    cubiertas: Map<string, { pasos: number; campos: number }>,
     inspeccionIdCompilada = '',
   ): Promise<PantallaRecorrida[]> {
     const rutaCompilada = compilada ? this.normalizarRuta(compilada.ruta) : '';
@@ -973,11 +1193,14 @@ export class QaSopLoomService {
     }
 
     return Promise.all(pantallas.map(async (pantalla, indice) => {
-      const cubierta = rutaCompilada !== '' && this.normalizarRuta(pantalla.ruta) === rutaCompilada;
-      // La pantalla que el plan cubre ya trae su propia inspección recién
-      // resuelta; el resto, si alguna vez se inspeccionó, presta prestada la
-      // última foto que quedó en disco. Sin ninguna de las dos, no hay imagen.
-      const inspeccionId = cubierta
+      const rutaPantalla = this.normalizarRuta(pantalla.ruta);
+      const cobertura = cubiertas.get(rutaPantalla);
+      const cubierta = Boolean(cobertura);
+      const esEntrada = rutaCompilada !== '' && rutaPantalla === rutaCompilada;
+      // La pantalla de entrada ya trae su propia inspección recién resuelta; el
+      // resto, si alguna vez se inspeccionó, presta prestada la última foto que
+      // quedó en disco. Sin ninguna de las dos, no hay imagen.
+      const inspeccionId = esEntrada
         ? inspeccionIdCompilada
         : (await this.inspector?.ultimaConCaptura(pantalla.ruta).catch(() => null)) ?? '';
       return {
@@ -987,24 +1210,24 @@ export class QaSopLoomService {
         nombre: pantalla.nombre,
         instrumentada: pantalla.instrumentada,
         cubierta,
-        pasos: cubierta ? pasos : 0,
-        campos: cubierta ? campos : 0,
+        pasos: cobertura?.pasos ?? 0,
+        campos: cobertura?.campos ?? 0,
         inspeccion_id: inspeccionId,
       };
     }));
   }
 
   /**
-   * Una pantalla nombrada que el plan no cubre no es un error del SOP: es un
-   * limite del motor, que hoy compila una sola pantalla por flujo. Se avisa
-   * para que nadie asuma que el salto entre pantallas ya se automatiza.
+   * Una pantalla nombrada que el plan no cubre queda avisada: o no expone
+   * data-testid, o el SOP no le asigna ningún campo ni acción que ejecutar.
+   * La causa concreta (por ejemplo, que falte inspeccionarla) la agrega
+   * `compilar` al armar el tramo.
    */
   private pendientesDeRecorrido(recorrido: PantallaRecorrida[]): string[] {
-    const cubierta = recorrido.find((pantalla) => pantalla.cubierta);
     return recorrido
       .filter((pantalla) => !pantalla.cubierta)
       .map((pantalla) => (pantalla.instrumentada
-        ? `El SOP también nombra ${pantalla.nombre} (${pantalla.ruta}), pero el plan ejecutable cubre una sola pantalla${cubierta ? ` (${cubierta.nombre})` : ''}. El salto entre pantallas todavía no se automatiza.`
+        ? `El SOP también nombra ${pantalla.nombre} (${pantalla.ruta}), pero el plan no ejecuta ningún paso ahí.`
         : `El SOP nombra ${pantalla.nombre} (${pantalla.ruta}), que todavía no expone data-testid. Hay que instrumentarla antes de poder automatizarla.`));
   }
 

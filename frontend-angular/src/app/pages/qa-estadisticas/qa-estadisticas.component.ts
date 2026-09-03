@@ -7,16 +7,15 @@ interface PantallaEstadistica {
   nombre: string;
   casosTotal: number;
   ejecucionesTotal: number;
-  tasaExito: number | null;
-  ultimaEjecucionEn: string;
 }
 
 interface ResumenGlobal {
   totalPantallas: number;
   totalCasos: number;
   totalEjecuciones: number;
-  tasaExitoGlobal: number | null;
   pantallaMasCorrida: string;
+  pantallaMasCorridaPorcentaje: number | null;
+  deltaEjecucionesPct: number | null;
 }
 
 interface ResumenHallazgos {
@@ -35,7 +34,7 @@ interface ResumenHallazgos {
             <mat-icon>insights</mat-icon>
             Estadísticas
           </h1>
-          <p>Cuántas veces se corrió cada pantalla, con qué resultado, y los hallazgos que dejaron esas corridas.</p>
+          <p>Resumen real de la actividad del sistema: corridas y hallazgos detectados.</p>
         </div>
         <button mat-stroked-button type="button" data-testid="qa-estadisticas-refresh-button" [disabled]="cargando" (click)="cargar()">
           <mat-icon>sync</mat-icon>
@@ -55,61 +54,89 @@ interface ResumenHallazgos {
 
       <ng-container *ngIf="!cargando && !error">
         <section class="metric-row">
-          <article class="metric-card" data-testid="qa-estadisticas-metric-ejecuciones">
-            <span class="metric-label">Ejecuciones totales</span>
-            <strong class="metric-value">{{ resumen.totalEjecuciones }}</strong>
+          <article class="metric-card metric-blue" data-testid="qa-estadisticas-metric-ejecuciones">
+            <span class="metric-icon"><mat-icon>play_circle</mat-icon></span>
+            <div class="metric-text">
+              <span class="metric-label">Ejecuciones totales</span>
+              <strong class="metric-value">{{ resumen.totalEjecuciones }}</strong>
+              <span
+                class="metric-delta"
+                *ngIf="resumen.deltaEjecucionesPct !== null"
+                [class.up]="resumen.deltaEjecucionesPct > 0"
+                [class.down]="resumen.deltaEjecucionesPct < 0">
+                <mat-icon>{{ resumen.deltaEjecucionesPct >= 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
+                {{ resumen.deltaEjecucionesPct > 0 ? '+' : '' }}{{ resumen.deltaEjecucionesPct }}% vs. semana anterior
+              </span>
+              <span class="metric-delta neutral" *ngIf="resumen.deltaEjecucionesPct === null">Sin corridas la semana pasada</span>
+            </div>
           </article>
-          <article class="metric-card" data-testid="qa-estadisticas-metric-tasa">
-            <span class="metric-label">Tasa de éxito global</span>
-            <strong class="metric-value">{{ resumen.tasaExitoGlobal !== null ? resumen.tasaExitoGlobal + '%' : '—' }}</strong>
+          <article class="metric-card metric-indigo" data-testid="qa-estadisticas-metric-casos">
+            <span class="metric-icon"><mat-icon>description</mat-icon></span>
+            <div class="metric-text">
+              <span class="metric-label">Casos cargados</span>
+              <strong class="metric-value">{{ resumen.totalCasos }}</strong>
+            </div>
           </article>
-          <article class="metric-card" data-testid="qa-estadisticas-metric-casos">
-            <span class="metric-label">Casos cargados</span>
-            <strong class="metric-value">{{ resumen.totalCasos }}</strong>
+          <article class="metric-card metric-amber" data-testid="qa-estadisticas-metric-mas-corrida">
+            <span class="metric-icon"><mat-icon>emoji_events</mat-icon></span>
+            <div class="metric-text">
+              <span class="metric-label">Pantalla más corrida</span>
+              <strong class="metric-value metric-value-texto">{{ resumen.pantallaMasCorrida || 'Sin corridas todavía' }}</strong>
+              <span class="metric-sub" *ngIf="resumen.pantallaMasCorridaPorcentaje !== null">
+                {{ resumen.pantallaMasCorridaPorcentaje }}% de las corridas totales
+              </span>
+            </div>
           </article>
-          <article class="metric-card" data-testid="qa-estadisticas-metric-mas-corrida">
-            <span class="metric-label">Pantalla más corrida</span>
-            <strong class="metric-value metric-value-texto">{{ resumen.pantallaMasCorrida || 'Sin corridas todavía' }}</strong>
-          </article>
-          <article class="metric-card" data-testid="qa-estadisticas-metric-hallazgos">
-            <span class="metric-label">Hallazgos abiertos</span>
-            <strong class="metric-value">{{ hallazgos.abiertos }}</strong>
+          <article class="metric-card metric-red" data-testid="qa-estadisticas-metric-hallazgos">
+            <span class="metric-icon"><mat-icon>report_problem</mat-icon></span>
+            <div class="metric-text">
+              <span class="metric-label">Hallazgos abiertos</span>
+              <strong class="metric-value">{{ hallazgos.abiertos }}</strong>
+              <span class="metric-sub" *ngIf="hallazgos.total > 0">de {{ hallazgos.total }} detectados en total</span>
+            </div>
           </article>
         </section>
 
         <section class="panel">
           <div class="panel-head">
             <div>
-              <span class="kicker">Corridas por pantalla</span>
-              <h2>Ejecuciones</h2>
+              <span class="kicker">Solo pantallas que ya corrieron</span>
+              <h2>Ejecuciones por pantalla</h2>
             </div>
           </div>
 
-          <div class="empty-inner" *ngIf="pantallas.length === 0">
-            <mat-icon>inventory_2</mat-icon>
-            <span>Todavía no hay pantallas con fuente de casos declarada.</span>
+          <div class="empty-inner" *ngIf="pantallasEjecutadas.length === 0">
+            <mat-icon>not_started</mat-icon>
+            <span>Todavía no se ejecutó ninguna pantalla.</span>
           </div>
 
-          <div class="pantalla-grid" *ngIf="pantallas.length > 0">
+          <div class="kpi-grid" *ngIf="pantallasEjecutadas.length > 0">
             <article
-              *ngFor="let pantalla of pantallas; trackBy: trackByRuta"
-              class="pantalla-row"
+              *ngFor="let pantalla of pantallasEjecutadas; let i = index; trackBy: trackByRuta"
+              class="kpi-card"
+              [class.top]="i === 0"
               [attr.data-testid]="'qa-estadisticas-pantalla-' + pantalla.codigo">
-              <div class="pantalla-row-head">
-                <div>
+              <svg viewBox="0 0 120 120" class="kpi-ring">
+                <circle cx="60" cy="60" r="50" class="kpi-ring-fondo"></circle>
+                <circle
+                  cx="60" cy="60" r="50"
+                  class="kpi-ring-fill"
+                  [class.top]="i === 0"
+                  [style.strokeDasharray]="arcoPantalla(pantalla)">
+                </circle>
+                <text x="60" y="57" text-anchor="middle" class="kpi-ring-valor">{{ pantalla.ejecucionesTotal }}</text>
+                <text x="60" y="75" text-anchor="middle" class="kpi-ring-sub">corrida(s)</text>
+              </svg>
+              <div class="kpi-info">
+                <span class="kpi-icon" [class.top]="i === 0">
+                  <mat-icon>{{ iconoPantalla(pantalla.nombre) }}</mat-icon>
+                </span>
+                <div class="kpi-nombre">
                   <strong>{{ pantalla.nombre }}</strong>
-                  <span class="pantalla-ruta">{{ pantalla.ruta }}</span>
+                  <span>{{ pantalla.ruta }}</span>
                 </div>
-                <span class="pantalla-total">{{ pantalla.ejecucionesTotal }} corrida(s)</span>
               </div>
-              <div class="barra-track">
-                <div class="barra-fill" [style.width.%]="anchoBarra(pantalla)"></div>
-              </div>
-              <div class="pantalla-row-foot">
-                <span class="pantalla-meta">{{ pantalla.casosTotal }} caso(s) cargados</span>
-                <span class="pantalla-meta" *ngIf="pantalla.tasaExito !== null">· {{ pantalla.tasaExito }}% de éxito</span>
-                <span class="pantalla-meta" *ngIf="pantalla.ejecucionesTotal === 0">Sin corridas todavía.</span>
-              </div>
+              <span class="kpi-porcentaje">{{ porcentajeDelTotal(pantalla) }}% del total de corridas</span>
             </article>
           </div>
         </section>
@@ -200,45 +227,107 @@ interface ResumenHallazgos {
 
     .metric-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
     }
 
     .metric-card {
-      display: grid;
-      gap: 6px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
       padding: 16px 18px;
       border: 1px solid #dbe4f0;
-      border-radius: 8px;
+      border-radius: 12px;
       background: #ffffff;
-      box-shadow: 0 18px 44px rgba(15, 23, 42, .06);
+      box-shadow: 0 14px 32px rgba(15, 23, 42, .06);
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 40px rgba(15, 23, 42, .1);
+    }
+
+    .metric-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+    }
+
+    .metric-icon mat-icon {
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+    }
+
+    .metric-blue .metric-icon { background: #eff6ff; color: #2563eb; }
+    .metric-indigo .metric-icon { background: #eef2ff; color: #4f46e5; }
+    .metric-amber .metric-icon { background: #fffbeb; color: #d97706; }
+    .metric-red .metric-icon { background: #fef2f2; color: #dc2626; }
+
+    .metric-text {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
     }
 
     .metric-label {
       color: #64748b;
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 950;
       letter-spacing: .02em;
       text-transform: uppercase;
     }
 
     .metric-value {
-      font-size: 26px;
+      font-size: 25px;
       font-weight: 950;
       color: #0f172a;
+      line-height: 1.1;
     }
 
     .metric-value-texto {
-      font-size: 16px;
+      font-size: 15px;
       line-height: 1.3;
+      overflow-wrap: anywhere;
     }
+
+    .metric-sub {
+      color: #94a3b8;
+      font-size: 10.5px;
+      font-weight: 800;
+    }
+
+    .metric-delta {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      color: #94a3b8;
+      font-size: 10.5px;
+      font-weight: 900;
+    }
+
+    .metric-delta mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+
+    .metric-delta.up { color: #16a34a; }
+    .metric-delta.down { color: #dc2626; }
+    .metric-delta.neutral { color: #94a3b8; }
 
     .panel {
       border: 1px solid #dbe4f0;
-      border-radius: 8px;
+      border-radius: 12px;
       background: #ffffff;
       box-shadow: 0 18px 44px rgba(15, 23, 42, .08);
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     .panel-head {
@@ -247,7 +336,7 @@ interface ResumenHallazgos {
       justify-content: space-between;
       gap: 16px;
       flex-wrap: wrap;
-      padding: 20px 22px;
+      padding: 18px 22px;
       border-bottom: 1px solid #e2e8f0;
       background: #f8fbff;
     }
@@ -263,79 +352,133 @@ interface ResumenHallazgos {
 
     .panel-head h2 {
       margin: 5px 0 0;
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 950;
     }
 
-    .pantalla-grid {
+    .kpi-grid {
       display: grid;
-      gap: 14px;
-      padding: 20px 22px;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+      padding: 22px;
     }
 
-    .pantalla-row {
+    .kpi-card {
       display: grid;
-      gap: 8px;
-      padding: 14px 16px;
+      justify-items: center;
+      gap: 10px;
+      padding: 18px 12px;
       border: 1px solid #e2e8f0;
-      border-radius: 8px;
+      border-radius: 14px;
       background: #fbfcfe;
+      text-align: center;
+      transition: transform 160ms ease, box-shadow 160ms ease;
     }
 
-    .pantalla-row-head {
+    .kpi-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 30px rgba(15, 23, 42, .08);
+    }
+
+    .kpi-card.top {
+      border-color: #fde68a;
+      background: linear-gradient(160deg, #fffdf5, #fbfcfe 65%);
+    }
+
+    .kpi-ring {
+      width: 108px;
+      height: 108px;
+    }
+
+    .kpi-ring-fondo {
+      fill: none;
+      stroke: #eef2f7;
+      stroke-width: 10;
+    }
+
+    .kpi-ring-fill {
+      fill: none;
+      stroke: #3157d5;
+      stroke-width: 10;
+      stroke-linecap: round;
+      transform: rotate(-90deg);
+      transform-origin: 60px 60px;
+      transition: stroke-dasharray 320ms ease;
+    }
+
+    .kpi-ring-fill.top {
+      stroke: #d97706;
+    }
+
+    .kpi-ring-valor {
+      font-size: 26px;
+      font-weight: 950;
+      fill: #0f172a;
+    }
+
+    .kpi-ring-sub {
+      font-size: 9.5px;
+      font-weight: 800;
+      fill: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+
+    .kpi-info {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 10px;
+      gap: 8px;
     }
 
-    .pantalla-row-head strong {
+    .kpi-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      background: #eff6ff;
+      color: #2563eb;
+    }
+
+    .kpi-icon.top {
+      background: #fef3c7;
+      color: #b45309;
+    }
+
+    .kpi-icon mat-icon {
+      font-size: 15px;
+      width: 15px;
+      height: 15px;
+    }
+
+    .kpi-nombre {
+      text-align: left;
+      min-width: 0;
+    }
+
+    .kpi-nombre strong {
       display: block;
-      font-size: 14px;
+      font-size: 12.5px;
       font-weight: 950;
       color: #0f172a;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 130px;
     }
 
-    .pantalla-ruta {
+    .kpi-nombre span {
       display: block;
-      margin-top: 2px;
       color: #94a3b8;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 750;
       font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     }
 
-    .pantalla-total {
-      flex: 0 0 auto;
-      color: #3157d5;
-      font-size: 13px;
-      font-weight: 950;
-    }
-
-    .barra-track {
-      height: 8px;
-      border-radius: 999px;
-      background: #e8eef7;
-      overflow: hidden;
-    }
-
-    .barra-fill {
-      height: 100%;
-      border-radius: 999px;
-      background: linear-gradient(90deg, #3157d5, #5b8bff);
-      transition: width 240ms ease;
-    }
-
-    .pantalla-row-foot {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .pantalla-meta {
+    .kpi-porcentaje {
       color: #64748b;
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 800;
     }
   `],
@@ -348,8 +491,9 @@ export class QaEstadisticasComponent implements OnInit {
     totalPantallas: 0,
     totalCasos: 0,
     totalEjecuciones: 0,
-    tasaExitoGlobal: null,
     pantallaMasCorrida: '',
+    pantallaMasCorridaPorcentaje: null,
+    deltaEjecucionesPct: null,
   };
   hallazgos: ResumenHallazgos = { total: 0, abiertos: 0 };
 
@@ -374,9 +518,32 @@ export class QaEstadisticasComponent implements OnInit {
     });
   }
 
-  anchoBarra(pantalla: PantallaEstadistica): number {
-    const max = Math.max(...this.pantallas.map((item) => item.ejecucionesTotal), 1);
-    return Math.round((pantalla.ejecucionesTotal / max) * 100);
+  /** Solo las pantallas que ya tuvieron al menos una corrida: las que nunca corrieron no aportan nada al gráfico. */
+  get pantallasEjecutadas(): PantallaEstadistica[] {
+    return this.pantallas.filter((item) => item.ejecucionesTotal > 0);
+  }
+
+  /** Qué porción del anillo pintar, proporcional al total de corridas de todas las pantallas. */
+  arcoPantalla(pantalla: PantallaEstadistica): string {
+    const circunferencia = 2 * Math.PI * 50;
+    const total = this.resumen.totalEjecuciones || 0;
+    if (total === 0) return `0 ${circunferencia}`;
+    const largo = (pantalla.ejecucionesTotal / total) * circunferencia;
+    return `${largo} ${circunferencia - largo}`;
+  }
+
+  porcentajeDelTotal(pantalla: PantallaEstadistica): number {
+    const total = this.resumen.totalEjecuciones || 0;
+    if (total === 0) return 0;
+    return Math.round((pantalla.ejecucionesTotal / total) * 1000) / 10;
+  }
+
+  /** Icono representativo de la pantalla, según palabras clave de su nombre. */
+  iconoPantalla(nombre: string): string {
+    const texto = nombre.toLowerCase();
+    if (texto.includes('ganancias')) return 'payments';
+    if (texto.includes('cliente')) return 'badge';
+    return 'dashboard';
   }
 
   trackByRuta(_index: number, pantalla: PantallaEstadistica): string {
@@ -391,8 +558,6 @@ export class QaEstadisticasComponent implements OnInit {
       nombre: this.texto(item['nombre']),
       casosTotal: this.numero(item['casos_total']),
       ejecucionesTotal: this.numero(item['ejecuciones_total']),
-      tasaExito: item['tasa_exito'] === null || item['tasa_exito'] === undefined ? null : Number(item['tasa_exito']),
-      ultimaEjecucionEn: this.texto(item['ultima_ejecucion_en']),
     }));
 
     const resumen = this.objeto(respuesta['resumen']);
@@ -400,10 +565,9 @@ export class QaEstadisticasComponent implements OnInit {
       totalPantallas: this.numero(resumen['total_pantallas']),
       totalCasos: this.numero(resumen['total_casos']),
       totalEjecuciones: this.numero(resumen['total_ejecuciones']),
-      tasaExitoGlobal: resumen['tasa_exito_global'] === null || resumen['tasa_exito_global'] === undefined
-        ? null
-        : Number(resumen['tasa_exito_global']),
       pantallaMasCorrida: this.texto(resumen['pantalla_mas_corrida']),
+      pantallaMasCorridaPorcentaje: this.numeroONulo(resumen['pantalla_mas_corrida_porcentaje']),
+      deltaEjecucionesPct: this.numeroONulo(resumen['delta_ejecuciones_pct']),
     };
 
     const hallazgos = this.objeto(respuesta['hallazgos']);
@@ -428,5 +592,9 @@ export class QaEstadisticasComponent implements OnInit {
   private numero(valor: unknown): number {
     const n = Number(valor);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  private numeroONulo(valor: unknown): number | null {
+    return valor === null || valor === undefined ? null : this.numero(valor);
   }
 }

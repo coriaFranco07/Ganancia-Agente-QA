@@ -76,6 +76,16 @@ export class QaSopLoomAprendizaje {
   @Prop({ type: MongooseSchema.Types.Mixed, default: null })
   inspeccion_navegacion?: Record<string, unknown> | null;
 
+  /**
+   * Todas las inspecciones de las que dependen los selectores del plan, una por
+   * pantalla del recorrido (la primera es la de entrada, la misma que
+   * `inspeccion_navegacion`). Un flujo de una sola pantalla tiene un elemento.
+   * Se revalidan todas antes de ejecutar: si cambió el DOM de cualquiera de
+   * ellas, la corrida se aborta en vez de operar a ciegas.
+   */
+  @Prop({ type: [MongooseSchema.Types.Mixed], default: [] })
+  inspecciones_navegacion?: Record<string, unknown>[];
+
   @Prop({ type: MongooseSchema.Types.Mixed, default: null })
   aprobacion?: Record<string, unknown> | null;
 

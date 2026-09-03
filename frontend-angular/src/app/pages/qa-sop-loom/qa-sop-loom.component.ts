@@ -252,7 +252,7 @@ interface PantallaAprendida {
             </mat-expansion-panel-header>
             <p class="block-hint">
               Pantallas que nombra el SOP, en el orden en que las nombra. Tocá una foto para agrandarla.
-              Solo la que está en el plan se automatiza hoy: el salto de una pantalla a otra todavía no se ejecuta.
+              Las que están en el plan se ejecutan; el resto quedan avisadas en Pendientes con el motivo.
             </p>
             <div class="plan-path">
               <article
@@ -312,7 +312,7 @@ interface PantallaAprendida {
         <div class="result-accordion" *ngIf="planEjecutable.length > 0">
           <mat-expansion-panel expanded data-testid="qa-sop-loom-plan">
                 <mat-expansion-panel-header>
-                  <mat-panel-title>Plan ejecutable · {{ pantallaObjetivo }}</mat-panel-title>
+                  <mat-panel-title>Plan ejecutable · {{ recorridoDelPlan }}</mat-panel-title>
                   <mat-panel-description>{{ planEjecutable.length }} paso(s)</mat-panel-description>
                 </mat-expansion-panel-header>
                 <p class="block-hint">
@@ -1723,6 +1723,16 @@ export class QaSopLoomComponent implements OnInit {
   get pantallaObjetivo(): string {
     const definicion = this.objeto(this.resultado?.definicionEjecutable);
     return this.texto(this.objeto(definicion['rutas'])['pantalla_objetivo']) || 'sin resolver';
+  }
+
+  /**
+   * Qué recorre el plan. Con una sola pantalla es su ruta; con varias, el
+   * camino de nombres para que se vea de un vistazo que el flujo salta.
+   */
+  get recorridoDelPlan(): string {
+    const cubiertas = this.pantallasDelFlujo.filter((pantalla) => pantalla.cubierta);
+    if (cubiertas.length > 1) return cubiertas.map((pantalla) => pantalla.nombre).join(' → ');
+    return this.pantallaObjetivo;
   }
 
   get firmas(): { negocio: FirmaAprendizaje | null; tecnica: FirmaAprendizaje | null } {

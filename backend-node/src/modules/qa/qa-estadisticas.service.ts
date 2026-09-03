@@ -20,6 +20,21 @@ interface EstadisticaPantalla {
   ultima_ejecucion_en: string | null;
 }
 
+interface DiaEvolucion {
+  fecha: string;
+  ejecuciones: number;
+}
+
+interface EventoActividad {
+  tipo: 'ejecucion_verde' | 'ejecucion_rojo' | 'hallazgo';
+  pantalla: string;
+  detalle: string;
+  severidad?: string;
+  en: string;
+}
+
+const DIAS_EVOLUCION = 14;
+
 @Injectable()
 export class QaEstadisticasService {
   constructor(
@@ -42,6 +57,10 @@ export class QaEstadisticasService {
 
     const totalEjecuciones = pantallas.reduce((acc, item) => acc + item.ejecuciones_total, 0);
     const totalVerde = pantallas.reduce((acc, item) => acc + item.ejecuciones_verde, 0);
+    const masCorrida = pantallas.find((item) => item.ejecuciones_total > 0) ?? null;
+
+    const evolucion = await this.evolucionDiaria();
+    const [evolucionAnterior, evolucionActual] = this.partirEnMitades(evolucion);
 
     return {
       pantallas,
@@ -50,16 +69,127 @@ export class QaEstadisticasService {
         total_casos: pantallas.reduce((acc, item) => acc + item.casos_total, 0),
         total_ejecuciones: totalEjecuciones,
         tasa_exito_global: this.tasaExito(totalVerde, totalEjecuciones),
-        pantalla_mas_corrida: pantallas.find((item) => item.ejecuciones_total > 0)?.nombre ?? null,
+        pantalla_mas_corrida: masCorrida?.nombre ?? null,
+        pantalla_mas_corrida_porcentaje: masCorrida ? this.tasaExito(masCorrida.ejecuciones_total, totalEjecuciones) : null,
+        // Compara la suma de los últimos 7 días contra los 7 anteriores, con
+        // los mismos datos de `evolucion` — sin otra consulta a Mongo.
+        delta_ejecuciones_pct: this.deltaPorcentual(evolucionAnterior, evolucionActual),
       },
+      evolucion,
       hallazgos: {
         total: hallazgos.length,
         abiertos: hallazgos.filter((item) => item.estado === 'abierto').length,
         por_severidad: this.contarPor(hallazgos, 'severidad'),
         por_tipo: this.contarPor(hallazgos, 'tipo'),
       },
+      actividad: await this.actividadReciente(),
       generado_en: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Ejecuciones por día de los últimos `DIAS_EVOLUCION` días, sumando ambas
+   * fuentes (runner genérico y SOP Loom). Un día sin corridas queda en cero:
+   * no se salta, para que el gráfico no distorsione la escala de tiempo.
+   */
+  private async evolucionDiaria(): Promise<DiaEvolucion[]> {
+    const hoy = new Date();
+    const desde = new Date(hoy);
+    desde.setUTCDate(desde.getUTCDate() - (DIAS_EVOLUCION - 1));
+    desde.setUTCHours(0, 0, 0, 0);
+    const desdeIso = desde.toISOString();
+
+    const [genericas, sopLoom] = await Promise.all([
+      this.ejecuciones.find({ iniciado_en: { $gte: desdeIso } }).select({ iniciado_en: 1 }).lean<Array<{ iniciado_en: string }>>(),
+      this.ejecucionesSopLoom.find({ iniciada_en: { $gte: desdeIso } }).select({ iniciada_en: 1 }).lean<Array<{ iniciada_en: string }>>(),
+    ]);
+
+    const porDia = new Map<string, number>();
+    for (const item of [...genericas.map((e) => e.iniciado_en), ...sopLoom.map((e) => e.iniciada_en)]) {
+      const dia = this.texto(item).slice(0, 10);
+      if (!dia) continue;
+      porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
+    }
+
+    const dias: DiaEvolucion[] = [];
+    for (let i = 0; i < DIAS_EVOLUCION; i++) {
+      const fecha = new Date(desde);
+      fecha.setUTCDate(fecha.getUTCDate() + i);
+      const clave = fecha.toISOString().slice(0, 10);
+      dias.push({ fecha: clave, ejecuciones: porDia.get(clave) ?? 0 });
+    }
+    return dias;
+  }
+
+  /** Divide una serie de N días en dos mitades iguales: [más vieja, más nueva]. */
+  private partirEnMitades(dias: DiaEvolucion[]): [DiaEvolucion[], DiaEvolucion[]] {
+    const mitad = Math.floor(dias.length / 2);
+    return [dias.slice(0, mitad), dias.slice(mitad)];
+  }
+
+  private deltaPorcentual(anterior: DiaEvolucion[], actual: DiaEvolucion[]): number | null {
+    const sumaAnterior = anterior.reduce((acc, item) => acc + item.ejecuciones, 0);
+    const sumaActual = actual.reduce((acc, item) => acc + item.ejecuciones, 0);
+    if (sumaAnterior === 0) return sumaActual > 0 ? 100 : null;
+    return Math.round(((sumaActual - sumaAnterior) / sumaAnterior) * 1000) / 10;
+  }
+
+  /**
+   * Últimos eventos reales del sistema: corridas terminadas (de las dos
+   * fuentes de ejecución) y hallazgos detectados, mezclados y ordenados por
+   * fecha. No incluye altas de casos: ya se ve como conteo en la tarjeta de
+   * arriba y sumarlo acá duplicaba la señal sin agregar nada nuevo.
+   */
+  private async actividadReciente(): Promise<EventoActividad[]> {
+    const pantallaEjecutable = fuentesCasosDisponibles().find((item) => item.fuente.ejecutable)?.nombre ?? 'Legajo de Ganancias';
+
+    const [genericas, sopLoom, hallazgosRecientes] = await Promise.all([
+      this.ejecuciones
+        .find({ estado: { $ne: 'corriendo' } })
+        .sort({ iniciado_en: -1 })
+        .limit(6)
+        .select({ estado: 1, iniciado_en: 1, finalizado_en: 1 })
+        .lean<Array<{ estado: string; iniciado_en: string; finalizado_en?: string }>>(),
+      this.ejecucionesSopLoom
+        .find({ estado: { $ne: 'corriendo' } })
+        .sort({ iniciada_en: -1 })
+        .limit(6)
+        .select({ estado: 1, iniciada_en: 1, finalizada_en: 1, pantalla_nombre: 1 })
+        .lean<Array<{ estado: string; iniciada_en: string; finalizada_en?: string; pantalla_nombre: string }>>(),
+      this.hallazgos
+        .find({})
+        .sort({ detectado_en: -1 })
+        .limit(6)
+        .select({ titulo: 1, severidad: 1, detectado_en: 1 })
+        .lean<Array<{ titulo: string; severidad: string; detectado_en: string }>>(),
+    ]);
+
+    const eventos: EventoActividad[] = [
+      ...genericas.map((item) => ({
+        tipo: (item.estado === 'verde' ? 'ejecucion_verde' : 'ejecucion_rojo') as EventoActividad['tipo'],
+        pantalla: pantallaEjecutable,
+        detalle: item.estado === 'verde' ? 'Ejecución completada' : 'Ejecución fallida',
+        en: item.finalizado_en || item.iniciado_en,
+      })),
+      ...sopLoom.map((item) => ({
+        tipo: (item.estado === 'verde' ? 'ejecucion_verde' : 'ejecucion_rojo') as EventoActividad['tipo'],
+        pantalla: item.pantalla_nombre,
+        detalle: item.estado === 'verde' ? 'Ejecución completada' : 'Ejecución fallida',
+        en: item.finalizada_en || item.iniciada_en,
+      })),
+      ...hallazgosRecientes.map((item) => ({
+        tipo: 'hallazgo' as const,
+        pantalla: '',
+        detalle: item.titulo,
+        severidad: item.severidad,
+        en: item.detectado_en,
+      })),
+    ];
+
+    return eventos
+      .filter((item) => item.en)
+      .sort((a, b) => (a.en < b.en ? 1 : a.en > b.en ? -1 : 0))
+      .slice(0, 8);
   }
 
   private async estadisticaDePantalla(
@@ -140,5 +270,9 @@ export class QaEstadisticasService {
       acc[clave] = (acc[clave] ?? 0) + 1;
       return acc;
     }, {});
+  }
+
+  private texto(valor: unknown): string {
+    return valor === undefined || valor === null ? '' : String(valor).trim();
   }
 }

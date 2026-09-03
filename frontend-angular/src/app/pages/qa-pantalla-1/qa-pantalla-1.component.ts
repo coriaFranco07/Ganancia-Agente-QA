@@ -136,15 +136,16 @@ interface CasoGuardadoLegacy {
             <span class="tag">MongoDB</span>
           </div>
 
-          <div class="form-grid">
+          <div class="form-grid" data-testid="qa-case-form">
             <label class="field">
               <span>ID caso</span>
-              <input [(ngModel)]="form.idCaso" name="idCaso" placeholder="QA-GAN-RET-001">
+              <input data-testid="qa-case-id-input" [(ngModel)]="form.idCaso" name="idCaso" placeholder="QA-GAN-RET-001">
             </label>
 
             <label class="field">
               <span>Código dataset</span>
               <select
+                data-testid="qa-case-dataset-select"
                 [(ngModel)]="form.datasetCodigo"
                 name="datasetCodigo"
                 [disabled]="cargandoDatasets || datasets.length === 0"
@@ -162,17 +163,17 @@ interface CasoGuardadoLegacy {
 
             <label class="field">
               <span>Período</span>
-              <input [(ngModel)]="form.periodo" name="periodo" placeholder="06/2026" [readonly]="!!datasetSeleccionado">
+              <input data-testid="qa-case-periodo-input" [(ngModel)]="form.periodo" name="periodo" placeholder="06/2026" [readonly]="!!datasetSeleccionado">
             </label>
 
             <label class="field">
               <span>Cliente</span>
-              <input [(ngModel)]="form.clienteNombre" name="clienteNombre" placeholder="NETSER S.A.">
+              <input data-testid="qa-case-cliente-input" [(ngModel)]="form.clienteNombre" name="clienteNombre" placeholder="NETSER S.A.">
             </label>
 
             <label class="field">
               <span>Modo saldo favor</span>
-              <select [(ngModel)]="form.modoSaldoFavor" name="modoSaldoFavor">
+              <select data-testid="qa-case-modo-saldo-select" [(ngModel)]="form.modoSaldoFavor" name="modoSaldoFavor">
                 <option value="">Usar dato del Excel</option>
                 <option value="compensar">Compensar</option>
                 <option value="devolver">Devolver</option>
@@ -182,61 +183,61 @@ interface CasoGuardadoLegacy {
 
             <label class="field field-wide">
               <span>Descripción</span>
-              <input [(ngModel)]="form.descripcion" name="descripcion" placeholder="Validar retención de ganancias del legajo">
+              <input data-testid="qa-case-descripcion-input" [(ngModel)]="form.descripcion" name="descripcion" placeholder="Validar retención de ganancias del legajo">
             </label>
 
             <label class="field">
               <span>Legajo</span>
-              <input [(ngModel)]="form.empleado.legajo" name="legajo" placeholder="6">
+              <input data-testid="qa-case-legajo-input" [(ngModel)]="form.empleado.legajo" name="legajo" placeholder="6">
             </label>
 
             <label class="field">
               <span>Empleado</span>
-              <input [(ngModel)]="form.empleado.nombre" name="empleadoNombre" placeholder="Apellido y nombre">
+              <input data-testid="qa-case-empleado-input" [(ngModel)]="form.empleado.nombre" name="empleadoNombre" placeholder="Apellido y nombre">
             </label>
 
             <label class="field">
               <span>CUIL</span>
-              <input [(ngModel)]="form.empleado.cuil" name="cuil" placeholder="20-00000000-0">
+              <input data-testid="qa-case-cuil-input" [(ngModel)]="form.empleado.cuil" name="cuil" placeholder="20-00000000-0">
             </label>
 
             <label class="field">
               <span>Remuneración bruta</span>
-              <input type="number" min="0" step="0.01" [(ngModel)]="form.liquidacion.remuneracionBruta" name="remuneracionBruta" placeholder="0.00">
+              <input data-testid="qa-case-remuneracion-input" type="number" min="0" step="0.01" [(ngModel)]="form.liquidacion.remuneracionBruta" name="remuneracionBruta" placeholder="0.00">
             </label>
 
             <label class="field">
               <span>Deducciones</span>
-              <input type="number" min="0" step="0.01" [(ngModel)]="form.liquidacion.deducciones" name="deducciones" placeholder="0.00">
+              <input data-testid="qa-case-deducciones-input" type="number" min="0" step="0.01" [(ngModel)]="form.liquidacion.deducciones" name="deducciones" placeholder="0.00">
             </label>
 
             <label class="field">
               <span>Estado esperado</span>
-              <select [(ngModel)]="form.estadoEsperado" name="estadoEsperado">
+              <select data-testid="qa-case-estado-select" [(ngModel)]="form.estadoEsperado" name="estadoEsperado">
                 <option *ngFor="let estado of estados" [ngValue]="estado.valor">{{ estado.texto }}</option>
               </select>
             </label>
 
             <label class="field field-wide">
               <span>Campo a validar</span>
-              <select [(ngModel)]="form.resultado.campo" name="campoResultado">
+              <select data-testid="qa-case-campo-select" [(ngModel)]="form.resultado.campo" name="campoResultado">
                 <option *ngFor="let campo of camposResultado" [ngValue]="campo.valor">{{ campo.texto }}</option>
               </select>
             </label>
 
             <label class="field">
               <span>Valor esperado</span>
-              <input type="number" step="0.01" [(ngModel)]="form.resultado.valorEsperado" name="valorEsperado" placeholder="0.00">
+              <input data-testid="qa-case-valor-esperado-input" type="number" step="0.01" [(ngModel)]="form.resultado.valorEsperado" name="valorEsperado" placeholder="0.00">
             </label>
 
             <label class="field">
               <span>Tolerancia</span>
-              <input type="number" min="0" step="0.01" [(ngModel)]="form.resultado.tolerancia" name="tolerancia" placeholder="0.05">
+              <input data-testid="qa-case-tolerancia-input" type="number" min="0" step="0.01" [(ngModel)]="form.resultado.tolerancia" name="tolerancia" placeholder="0.05">
             </label>
           </div>
 
           <div class="excel-box">
-            <input #excelInput hidden type="file" accept=".xlsx,.xls" (change)="seleccionarExcel($event)">
+            <input #excelInput data-testid="qa-case-excel-input" hidden type="file" accept=".xlsx,.xls" (change)="seleccionarExcel($event)">
             <button mat-stroked-button color="primary" type="button" class="excel-btn" (click)="excelInput.click()">
               <mat-icon>attach_file</mat-icon>
               Agregar Excel
@@ -260,18 +261,18 @@ interface CasoGuardadoLegacy {
             </ng-template>
           </div>
 
-          <div *ngIf="mensaje" class="mensaje" [class.error]="mensajeError">{{ mensaje }}</div>
+          <div *ngIf="mensaje" class="mensaje" [class.error]="mensajeError" data-testid="qa-case-message">{{ mensaje }}</div>
 
           <div class="acciones">
-            <button mat-stroked-button type="button" (click)="cargarEjemplo()">
+            <button mat-stroked-button type="button" data-testid="qa-case-example-button" (click)="cargarEjemplo()">
               <mat-icon>auto_fix_high</mat-icon>
               Ejemplo
             </button>
-            <button mat-stroked-button type="button" (click)="nuevoLimpio()">
+            <button mat-stroked-button type="button" data-testid="qa-case-reset-button" (click)="nuevoLimpio()">
               <mat-icon>refresh</mat-icon>
               Nuevo limpio
             </button>
-            <button mat-flat-button color="primary" type="button" [disabled]="guardando" (click)="guardarCaso()">
+            <button mat-flat-button color="primary" type="button" data-testid="qa-case-save-button" [disabled]="guardando" (click)="guardarCaso()">
               <mat-icon>{{ guardando ? 'hourglass_top' : 'save' }}</mat-icon>
               {{ guardando ? 'Guardando...' : 'Guardar caso' }}
             </button>
