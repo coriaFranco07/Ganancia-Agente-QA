@@ -9,11 +9,11 @@
  */
 
 const PAYLOADS_INYECCION_TEXTO = [
-  { valor: "' OR '1'='1", motivo: 'inyeccion SQL basica' },
-  { valor: '{"$ne": null}', motivo: 'inyeccion NoSQL basica (Mongo)' },
-  { valor: '<script>alert(1)</script>', motivo: 'XSS reflejado basico' },
-  { valor: '../../etc/passwd', motivo: 'path traversal basico' },
-  { valor: '{{7*7}}', motivo: 'inyeccion de plantilla basica' },
+  { valor: "' OR '1'='1", motivo: 'inyeccion SQL basica', tipo: 'inyeccion' },
+  { valor: '{"$ne": null}', motivo: 'inyeccion NoSQL basica (Mongo)', tipo: 'inyeccion' },
+  { valor: '<script>alert(1)</script>', motivo: 'XSS reflejado basico', tipo: 'inyeccion' },
+  { valor: '../../etc/passwd', motivo: 'path traversal basico', tipo: 'inyeccion' },
+  { valor: '{{7*7}}', motivo: 'inyeccion de plantilla basica', tipo: 'inyeccion' },
 ];
 
 function textoConLargo(largo) {
@@ -40,13 +40,13 @@ function funcionalTexto(restriccion, obligatorio) {
 function seguridadTexto(restriccion) {
   const candidatos = [...PAYLOADS_INYECCION_TEXTO];
   if (typeof restriccion.largo_exacto === 'number') {
-    candidatos.push({ valor: textoConLargo(restriccion.largo_exacto * 2), motivo: `viola el largo exacto declarado (${restriccion.largo_exacto} caracteres esperados)` });
+    candidatos.push({ valor: textoConLargo(restriccion.largo_exacto * 2), motivo: `viola el largo exacto declarado (${restriccion.largo_exacto} caracteres esperados)`, tipo: 'violacion_restriccion' });
   }
   if (typeof restriccion.largo_maximo === 'number') {
-    candidatos.push({ valor: textoConLargo(restriccion.largo_maximo + 20), motivo: `excede el largo maximo declarado (${restriccion.largo_maximo})` });
+    candidatos.push({ valor: textoConLargo(restriccion.largo_maximo + 20), motivo: `excede el largo maximo declarado (${restriccion.largo_maximo})`, tipo: 'violacion_restriccion' });
   }
   if (restriccion.patron) {
-    candidatos.push({ valor: 'valor-que-no-matchea-el-patron', motivo: `no respeta el patron declarado (${restriccion.patron})` });
+    candidatos.push({ valor: 'valor-que-no-matchea-el-patron', motivo: `no respeta el patron declarado (${restriccion.patron})`, tipo: 'violacion_restriccion' });
   }
   return candidatos;
 }
@@ -61,12 +61,12 @@ function funcionalNumero(restriccion) {
 
 function seguridadNumero(restriccion) {
   const candidatos = [
-    { valor: '-99999999', motivo: 'numero negativo fuera de cualquier rango razonable' },
-    { valor: '1e309', motivo: 'desborde numerico (Infinity)' },
-    { valor: 'NaN', motivo: 'valor no numerico en campo numerico' },
+    { valor: '-99999999', motivo: 'numero negativo fuera de cualquier rango razonable', tipo: 'violacion_restriccion' },
+    { valor: '1e309', motivo: 'desborde numerico (Infinity)', tipo: 'violacion_restriccion' },
+    { valor: 'NaN', motivo: 'valor no numerico en campo numerico', tipo: 'violacion_restriccion' },
   ];
-  if (typeof restriccion.valor_maximo === 'number') candidatos.push({ valor: String(restriccion.valor_maximo * 1000), motivo: `muy por encima del maximo declarado (${restriccion.valor_maximo})` });
-  if (typeof restriccion.valor_minimo === 'number') candidatos.push({ valor: String(restriccion.valor_minimo - 1), motivo: `un paso por debajo del minimo declarado (${restriccion.valor_minimo})` });
+  if (typeof restriccion.valor_maximo === 'number') candidatos.push({ valor: String(restriccion.valor_maximo * 1000), motivo: `muy por encima del maximo declarado (${restriccion.valor_maximo})`, tipo: 'violacion_restriccion' });
+  if (typeof restriccion.valor_minimo === 'number') candidatos.push({ valor: String(restriccion.valor_minimo - 1), motivo: `un paso por debajo del minimo declarado (${restriccion.valor_minimo})`, tipo: 'violacion_restriccion' });
   return candidatos;
 }
 
@@ -86,11 +86,11 @@ function funcionalFecha(restriccion) {
 
 function seguridadFecha(restriccion) {
   const candidatos = [
-    { valor: '9999-99-99', motivo: 'fecha con mes y dia invalidos' },
-    { valor: '0000-00-00', motivo: 'fecha nula invalida' },
+    { valor: '9999-99-99', motivo: 'fecha con mes y dia invalidos', tipo: 'violacion_restriccion' },
+    { valor: '0000-00-00', motivo: 'fecha nula invalida', tipo: 'violacion_restriccion' },
   ];
-  if (typeof restriccion.dias_atras_max === 'number') candidatos.push({ valor: fechaDesdeHoy(-restriccion.dias_atras_max - 3650), motivo: `muy anterior al limite de antiguedad declarado (${restriccion.dias_atras_max} dias)` });
-  if (typeof restriccion.dias_adelante_max === 'number') candidatos.push({ valor: fechaDesdeHoy(restriccion.dias_adelante_max + 3650), motivo: `muy posterior al limite de futuro declarado (${restriccion.dias_adelante_max} dias)` });
+  if (typeof restriccion.dias_atras_max === 'number') candidatos.push({ valor: fechaDesdeHoy(-restriccion.dias_atras_max - 3650), motivo: `muy anterior al limite de antiguedad declarado (${restriccion.dias_atras_max} dias)`, tipo: 'violacion_restriccion' });
+  if (typeof restriccion.dias_adelante_max === 'number') candidatos.push({ valor: fechaDesdeHoy(restriccion.dias_adelante_max + 3650), motivo: `muy posterior al limite de futuro declarado (${restriccion.dias_adelante_max} dias)`, tipo: 'violacion_restriccion' });
   return candidatos;
 }
 
@@ -162,6 +162,7 @@ export function derivarEscenarios(aprendizajeId, pasos, campos, categoria) {
         campo_bajo_prueba: campo.clave,
         valor_bajo_prueba: candidato.valor,
         motivo: candidato.motivo,
+        tipo: candidato.tipo,
         datos,
       });
     });

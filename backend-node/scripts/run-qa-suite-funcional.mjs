@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 import mongoose from 'mongoose';
 import { chromium } from 'playwright-core';
 import {
+  activarAislamientoDatos,
   asegurarUsuario,
   cargarAprendizaje,
   conectarMongo,
@@ -36,8 +37,14 @@ import { derivarEscenarios } from './lib/qa-suite-derivador.mjs';
 const CATEGORIA = 'funcional';
 const backendRoot = process.cwd();
 const repoRoot = resolve(backendRoot, '..');
-const outputDir = resolve(repoRoot, 'outputs/playwright/qa-suite-funcional');
 const cfg = resolverConfigComun();
+if (cfg.demoDegradadoSinEscritorio) {
+  console.warn('Modo demo pedido sin entorno gráfico detectado (sin DISPLAY/WAYLAND_DISPLAY, o CI): corriendo headless.');
+}
+// El orquestador fija un directorio propio por ejecucion (evita que dos
+// corridas de la misma categoria se pisen evidencia y capturas); a mano cae
+// a la carpeta fija de siempre.
+const outputDir = cfg.outputDirEnv ? resolve(repoRoot, cfg.outputDirEnv) : resolve(repoRoot, 'outputs/playwright/qa-suite-funcional');
 
 const capturas = [];
 const capturasFallidas = [];
@@ -60,6 +67,7 @@ try {
   const executablePath = detectarNavegador();
   browser = await chromium.launch({ headless: cfg.headless, ...(executablePath ? { executablePath } : {}), slowMo: cfg.slowMoMs });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-AR' });
+  activarAislamientoDatos(context, cfg.ejecucionId);
   page = await context.newPage();
   page.setDefaultTimeout(cfg.timeoutMs);
   const tomarCaptura = crearTomarCaptura(page, outputDir, capturas, capturasFallidas);
@@ -125,12 +133,13 @@ try {
  */
 async function correrEscenario(escenario, pasos, rutaObjetivo, tomarCaptura) {
   const pasosEjecutados = [];
+  const contexto = {};
   let estado = 'ok';
   let detalle = '';
 
   for (const paso of pasos) {
     try {
-      const resultado = await ejecutarPaso(page, cfg.frontendUrl, paso, rutaObjetivo, escenario.datos);
+      const resultado = await ejecutarPaso(page, cfg.frontendUrl, paso, rutaObjetivo, escenario.datos, contexto);
       pasosEjecutados.push({ tipo: paso.tipo, campo: paso.campo ?? null, estado: resultado.estado, detalle: resultado.detalle });
       if (resultado.estado === 'hallazgo' && estado === 'ok') {
         estado = 'hallazgo';

@@ -908,12 +908,19 @@ export class QaSopLoomService {
       );
     }
 
+    // `restriccion` es la que declara el catalogo (mas lo que haya pisado una
+    // regla de validacion via aplicarReglasCampos, unas lineas arriba): sin
+    // ella, la Suite de Calidad deriva valores de prueba genericos que no
+    // pasan la validacion real del formulario (ver Fase 6 del plan de la
+    // Suite en docs/plan_suite_calidad.md).
     const campos = Array.from(camposCubiertos.values()).map((campo) => ({
       nombre: campo.clave,
       etiqueta: campo.etiqueta,
       tipo: campo.tipo,
       obligatorio: campo.obligatorio,
       testid: campo.testid,
+      alias: campo.alias,
+      restriccion: campo.restriccion ?? null,
       fuente: {
         tipo: 'navegacion',
         ref: inspeccion.id,
