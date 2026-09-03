@@ -18,6 +18,11 @@ export class QaRunnerController {
     return this.service.listarUltimas();
   }
 
+  @Get('ejecuciones/conteos')
+  conteos() {
+    return this.service.contarPorCaso();
+  }
+
   @Get('ejecuciones/:id')
   obtener(@Param('id') id: string) {
     return this.service.obtener(id);

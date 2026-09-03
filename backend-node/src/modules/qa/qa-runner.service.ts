@@ -144,6 +144,19 @@ export class QaRunnerService {
     return docs.map((doc, index) => this.serializar(doc, hallazgos[index]));
   }
 
+  /** Cuántas veces se corrió cada caso, sin importar el resultado. Para la
+   * tarjeta de "Casos": no importa si dio verde o rojo, importa que se probó. */
+  async contarPorCaso(): Promise<Record<string, number>> {
+    const filas = await this.ejecuciones
+      .aggregate<{ _id: string; total: number }>([{ $group: { _id: '$caso_id', total: { $sum: 1 } } }])
+      .exec();
+    const conteos: Record<string, number> = {};
+    for (const fila of filas) {
+      if (fila._id) conteos[fila._id] = fila.total;
+    }
+    return conteos;
+  }
+
   private observarProceso(child: ChildProcessWithoutNullStreams, ejecucionId: string, casoId: string, modo: ModoQaEjecucion): void {
     let stdout = '';
     let stderr = '';
