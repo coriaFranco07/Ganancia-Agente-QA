@@ -186,16 +186,16 @@ interface PantallaAprendida {
             mat-stroked-button
             type="button"
             data-testid="qa-sop-loom-inspect-button"
-            [disabled]="!resultado?.ruta || inspeccionando"
+            [disabled]="!resultado?.ruta || inspeccionando || inspeccionVigente"
             (click)="inspeccionarPantalla()">
             <mat-icon>travel_explore</mat-icon>
             {{ inspeccionando ? 'Inspeccionando...' : 'Inspeccionar pantalla' }}
           </button>
-          <button mat-stroked-button type="button" data-testid="qa-sop-loom-save-button" [disabled]="!resultado?.inspeccionNavegacion || guardando" (click)="guardarAprendizaje()">
+          <button mat-stroked-button type="button" data-testid="qa-sop-loom-save-button" [disabled]="!resultado?.inspeccionNavegacion || guardando || flujoGuardado" (click)="guardarAprendizaje()">
             <mat-icon>save</mat-icon>
             {{ guardando ? 'Guardando...' : 'Guardar flujo' }}
           </button>
-          <button mat-flat-button color="primary" type="submit" data-testid="qa-sop-loom-learn-button">
+          <button mat-flat-button color="primary" type="submit" data-testid="qa-sop-loom-learn-button" [disabled]="analizarDeshabilitado">
             <mat-icon>school</mat-icon>
             Analizar texto
           </button>
@@ -207,7 +207,7 @@ interface PantallaAprendida {
           <div class="result-head">
             <div>
               <span class="kicker">Flujo detectado</span>
-              <h2>{{ aprendido.nombre }}</h2>
+              <h2>{{ recorridoDelPlan }}</h2>
               <p>{{ aprendido.ruta || 'Ruta pendiente' }}</p>
             </div>
             <span class="state-chip" [ngClass]="aprendido.estado">{{ estadoTexto(aprendido.estado) }}</span>
@@ -325,7 +325,7 @@ interface PantallaAprendida {
                     <mat-icon>info</mat-icon>
                     Cambiaste el orden: guardá para que el agente lo use.
                   </span>
-                  <button mat-flat-button color="primary" type="button" data-testid="qa-sop-loom-save-button-plan" [disabled]="guardando" (click)="guardarAprendizaje()">
+                  <button mat-flat-button color="primary" type="button" data-testid="qa-sop-loom-save-button-plan" [disabled]="guardando || flujoGuardado" (click)="guardarAprendizaje()">
                     <mat-icon>save</mat-icon>
                     {{ guardando ? 'Guardando...' : 'Guardar flujo' }}
                   </button>
@@ -362,22 +362,38 @@ interface PantallaAprendida {
           <mat-expansion-panel data-testid="qa-sop-loom-casos">
             <mat-expansion-panel-header>
               <mat-panel-title>Casos que va a ejecutar</mat-panel-title>
-              <mat-panel-description>{{ casosAEjecutar.length }}</mat-panel-description>
+              <mat-panel-description>{{ casosSeleccionadosCount }} / {{ casosAEjecutar.length }}</mat-panel-description>
             </mat-expansion-panel-header>
             <p class="block-hint">
               Salen de los casos cargados en Pantalla 3, a mano o por importación de Excel.
-              El sistema no inventa datos de prueba.
+              El sistema no inventa datos de prueba. Desmarcá los que no quieras correr esta vez.
             </p>
             <div *ngIf="casosAEjecutar.length === 0" class="empty-row">
               <mat-icon>inventory_2</mat-icon>
               <span>Sin casos. Cargá al menos uno en Pantalla 3 y volvé a guardar el flujo.</span>
             </div>
+            <label class="caso-check caso-check-todos" *ngIf="casosAEjecutar.length > 0">
+              <input
+                type="checkbox"
+                [checked]="todosLosCasosSeleccionados"
+                (change)="alternarTodosLosCasos()"
+                data-testid="qa-sop-loom-caso-todos">
+              <span>Seleccionar todos</span>
+            </label>
             <div class="field-grid" *ngIf="casosAEjecutar.length > 0">
               <article
                 *ngFor="let caso of casosAEjecutar; trackBy: trackByCaso"
                 class="field-card"
+                [class.caso-no-seleccionado]="!estaCasoSeleccionado(caso.id)"
                 [attr.data-testid]="'qa-sop-loom-caso-' + caso.id">
-                <strong>{{ caso.id }}</strong>
+                <label class="caso-check">
+                  <input
+                    type="checkbox"
+                    [checked]="estaCasoSeleccionado(caso.id)"
+                    (change)="alternarCaso(caso.id)"
+                    [attr.data-testid]="'qa-sop-loom-caso-check-' + caso.id">
+                  <strong>{{ caso.id }}</strong>
+                </label>
                 <span>{{ caso.resumen }}</span>
               </article>
             </div>
@@ -453,7 +469,7 @@ interface PantallaAprendida {
                 color="primary"
                 type="button"
                 data-testid="qa-sop-loom-run-button"
-                [disabled]="ejecutando || aprendido.estado !== 'aprobado'"
+                [disabled]="ejecutando || aprendido.estado !== 'aprobado' || casosSeleccionadosCount === 0"
                 (click)="ejecutarAprendizaje('demo')">
                 <mat-icon>play_arrow</mat-icon>
                 {{ ejecutando ? 'Ejecutando...' : 'Ejecutar agente' }}
@@ -506,7 +522,7 @@ interface PantallaAprendida {
         <div class="learned-grid" *ngIf="aprendizajes.length > 0">
           <article *ngFor="let item of aprendizajes; trackBy: trackByAprendizaje" class="learned-card" [attr.data-testid]="'qa-sop-loom-learned-' + item.id">
             <div>
-              <strong>{{ item.nombre }}</strong>
+              <strong>{{ nombrePantallas(item) }}</strong>
               <span>{{ item.ruta || 'Ruta pendiente' }} · {{ item.pasos.length }} paso(s)</span>
             </div>
             <span class="state-chip" [ngClass]="item.estado">{{ estadoTexto(item.estado) }}</span>
@@ -586,9 +602,11 @@ interface PantallaAprendida {
       min-height: calc(100vh - 52px);
       padding: 24px;
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: 16px;
       color: #0f172a;
       background: #f4f7fb;
+      overflow-x: hidden;
     }
 
     .page-head {
@@ -1319,7 +1337,33 @@ interface PantallaAprendida {
     .field-card {
       display: grid;
       gap: 7px;
-      transition: border-color 150ms ease, box-shadow 150ms ease;
+      transition: border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+    }
+
+    .field-card.caso-no-seleccionado {
+      opacity: .5;
+    }
+
+    .caso-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .caso-check input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #2458fb;
+      cursor: pointer;
+    }
+
+    .caso-check-todos {
+      margin: 0 0 10px;
+      font-size: 12.5px;
+      font-weight: 800;
+      color: #334155;
     }
 
     .field-card:hover {
@@ -1589,6 +1633,19 @@ export class QaSopLoomComponent implements OnInit {
   eliminandoId = '';
   /** Se arrastró un paso del Plan ejecutable y todavía no se guardó el flujo. */
   ordenSinGuardar = false;
+  /** Texto ya analizado con éxito; null hasta el primer análisis. "Analizar
+   * texto" se deshabilita mientras el textarea siga igual a este valor. */
+  private textoAnalizado: string | null = null;
+  /** Hay una inspección de navegación vigente para el resultado actual: no
+   * hace falta repetirla hasta el próximo análisis. */
+  inspeccionVigente = false;
+  /** El flujo actual ya se guardó tal cual está: no hace falta volver a
+   * guardar hasta el próximo análisis, inspección o reordenamiento. */
+  flujoGuardado = false;
+  /** null = sin selección explícita, corren todos los casos (default). Con
+   * selección, "Ejecutar agente" solo opera esos. Se reinicia a null cada vez
+   * que cambia el set de casos (nuevo análisis, guardado, u otro flujo abierto). */
+  casosSeleccionadosIds: Set<string> | null = null;
   capturaAbierta: CapturaAbierta | null = null;
   capturaConError = false;
 
@@ -1702,6 +1759,7 @@ export class QaSopLoomComponent implements OnInit {
       definicionEjecutable: { ...definicion, pasos_ejecutables: pasos },
     };
     this.ordenSinGuardar = true;
+    this.flujoGuardado = false;
   }
 
   get casosAEjecutar(): CasoAEjecutar[] {
@@ -1720,19 +1778,70 @@ export class QaSopLoomComponent implements OnInit {
     });
   }
 
+  get casosSeleccionadosCount(): number {
+    return this.casosSeleccionadosIds === null
+      ? this.casosAEjecutar.length
+      : this.casosAEjecutar.filter((caso) => this.casosSeleccionadosIds!.has(caso.id)).length;
+  }
+
+  get todosLosCasosSeleccionados(): boolean {
+    return this.casosSeleccionadosIds === null
+      || this.casosAEjecutar.every((caso) => this.casosSeleccionadosIds!.has(caso.id));
+  }
+
+  estaCasoSeleccionado(casoId: string): boolean {
+    return this.casosSeleccionadosIds === null || this.casosSeleccionadosIds.has(casoId);
+  }
+
+  alternarCaso(casoId: string): void {
+    // Primer click desde "todos" (null): se materializa el set con todos los
+    // casos actuales y recién ahí se saca el que se destildó.
+    if (this.casosSeleccionadosIds === null) {
+      this.casosSeleccionadosIds = new Set(this.casosAEjecutar.map((caso) => caso.id));
+    }
+    if (this.casosSeleccionadosIds.has(casoId)) {
+      this.casosSeleccionadosIds.delete(casoId);
+    } else {
+      this.casosSeleccionadosIds.add(casoId);
+    }
+  }
+
+  alternarTodosLosCasos(): void {
+    this.casosSeleccionadosIds = this.todosLosCasosSeleccionados ? new Set() : null;
+  }
+
   get pantallaObjetivo(): string {
     const definicion = this.objeto(this.resultado?.definicionEjecutable);
     return this.texto(this.objeto(definicion['rutas'])['pantalla_objetivo']) || 'sin resolver';
   }
 
   /**
-   * Qué recorre el plan. Con una sola pantalla es su ruta; con varias, el
-   * camino de nombres para que se vea de un vistazo que el flujo salta.
+   * Qué recorre el plan: el nombre real de la pantalla que aprendió (o la
+   * cadena de nombres, en orden, si el flujo cruza más de una). Nunca el
+   * nombre interno del aprendizaje ni una ruta técnica, salvo que todavía no
+   * haya nada resuelto contra el catálogo.
    */
   get recorridoDelPlan(): string {
-    const cubiertas = this.pantallasDelFlujo.filter((pantalla) => pantalla.cubierta);
-    if (cubiertas.length > 1) return cubiertas.map((pantalla) => pantalla.nombre).join(' → ');
-    return this.pantallaObjetivo;
+    return this.nombresPantallasDe(this.resultado?.definicionEjecutable, this.pantallaObjetivo);
+  }
+
+  /** Mismo criterio que `recorridoDelPlan`, para un ítem de la lista de flujos guardados. */
+  nombrePantallas(item: PantallaAprendida): string {
+    return this.nombresPantallasDe(item.definicionEjecutable, item.nombre);
+  }
+
+  private nombresPantallasDe(
+    definicionEjecutable: Record<string, unknown> | null | undefined,
+    fallback: string,
+  ): string {
+    const definicion = this.objeto(definicionEjecutable);
+    const rutas = this.objeto(definicion['rutas']);
+    const recorrido = this.arrayObjetos(rutas['recorrido']);
+    const cubiertas = recorrido.filter((pantalla) => Boolean(pantalla['cubierta']));
+    const nombres = (cubiertas.length > 0 ? cubiertas : recorrido)
+      .map((pantalla) => this.texto(pantalla['nombre']))
+      .filter(Boolean);
+    return nombres.length > 0 ? nombres.join(' → ') : fallback || 'sin resolver';
   }
 
   get firmas(): { negocio: FirmaAprendizaje | null; tecnica: FirmaAprendizaje | null } {
@@ -1832,12 +1941,14 @@ export class QaSopLoomComponent implements OnInit {
   }
 
   ejecutarAprendizaje(modo: 'demo' | 'rapido'): void {
-    if (!this.resultado) return;
+    if (!this.resultado || this.casosSeleccionadosCount === 0) return;
 
     this.ejecutando = true;
+    // null = nunca se tocó la selección, corren todos (el runner lo interpreta igual).
+    const casoIds = this.casosSeleccionadosIds === null ? [] : Array.from(this.casosSeleccionadosIds);
     this.api.post<Record<string, unknown>>(
       `/qa/sop-loom/aprendizajes/${encodeURIComponent(this.resultado.id)}/ejecutar`,
-      { modo },
+      { modo, casoIds },
     ).subscribe({
       next: (response) => {
         const aprendizaje = this.normalizarAprendizaje(response);
@@ -1863,6 +1974,16 @@ export class QaSopLoomComponent implements OnInit {
     this.mensaje = '';
     this.mensajeError = false;
     this.ordenSinGuardar = false;
+    this.textoAnalizado = null;
+    this.inspeccionVigente = false;
+    this.flujoGuardado = false;
+    this.casosSeleccionadosIds = null;
+  }
+
+  /** "Analizar texto" queda deshabilitado hasta que el textarea cambie
+   * respecto de lo último que se analizó con éxito. */
+  get analizarDeshabilitado(): boolean {
+    return this.textoAnalizado !== null && this.form.descripcionVideo.trim() === this.textoAnalizado;
   }
 
   actualizarAprendizajes(): void {
@@ -1906,6 +2027,11 @@ export class QaSopLoomComponent implements OnInit {
     this.mensaje = pendientes.length > 0
       ? `Flujo detectado con ${pendientes.length} pendiente(s) para revisar.`
       : 'Flujo aprendido sin pendientes obligatorios.';
+
+    this.textoAnalizado = descripcion;
+    this.inspeccionVigente = false;
+    this.flujoGuardado = false;
+    this.casosSeleccionadosIds = null;
   }
 
   inspeccionarPantalla(): void {
@@ -1928,6 +2054,9 @@ export class QaSopLoomComponent implements OnInit {
           definicionEjecutable: null,
         };
         this.mensaje = `Pantalla inspeccionada: ${inspeccion.elementos.length} elemento(s) registrados con fuente navegación.`;
+        this.inspeccionVigente = true;
+        this.flujoGuardado = false;
+        this.casosSeleccionadosIds = null;
       },
       error: (error) => {
         this.inspeccionando = false;
@@ -1953,6 +2082,8 @@ export class QaSopLoomComponent implements OnInit {
         this.mensajeError = false;
         this.mensaje = 'Flujo guardado en MongoDB.';
         this.ordenSinGuardar = false;
+        this.flujoGuardado = true;
+        this.casosSeleccionadosIds = null;
       },
       error: (error) => {
         this.mensajeError = true;
@@ -1997,8 +2128,12 @@ export class QaSopLoomComponent implements OnInit {
       descripcionVideo: item.descripcionVideo || item.pasos.map((paso) => `${paso.orden}. ${paso.accion}`).join('\n'),
     };
     this.mensajeError = false;
-    this.mensaje = `Flujo ${item.nombre} cargado.`;
+    this.mensaje = `Flujo ${this.nombrePantallas(item)} cargado.`;
     this.ordenSinGuardar = false;
+    this.textoAnalizado = this.form.descripcionVideo.trim();
+    this.inspeccionVigente = Boolean(item.inspeccionNavegacion);
+    this.flujoGuardado = true;
+    this.casosSeleccionadosIds = null;
   }
 
   estadoTexto(estado: EstadoAprendizaje): string {

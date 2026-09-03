@@ -5,6 +5,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import mongoose from 'mongoose';
 import { chromium } from 'playwright-core';
+// Mismo catálogo que usa el backend para firmar el aprendizaje (requiere `npm
+// run build` compilado): así la revalidación lee los campos de cada caso con
+// la misma lógica por pantalla (mapeo/rutas_datos), en vez de reimplementarla
+// acá con una forma fija que solo servía para Pantalla 3.
+import { datosDesdeCaso, pantallaPorOrigenCaso } from '../dist/modules/qa/qa-catalogo-elementos.js';
 
 const backendRoot = process.cwd();
 const repoRoot = resolve(backendRoot, '..');
@@ -96,7 +101,16 @@ async function ejecutarAprendizaje(aprendizaje) {
   const rutas = objeto(definicion.rutas);
   const rutaObjetivo = texto(rutas.pantalla_objetivo);
   const pasos = Array.isArray(definicion.pasos_ejecutables) ? definicion.pasos_ejecutables : [];
-  const casos = Array.isArray(definicion.casos) ? definicion.casos.map(objeto) : [];
+  const todosLosCasos = Array.isArray(definicion.casos) ? definicion.casos.map(objeto) : [];
+  // Vacío = corrió "Ejecutar agente" sin marcar casos puntuales: corre todos
+  // los congelados, como siempre. Con selección, solo esos.
+  const idsSeleccionados = texto(process.env.AUDITORIA_QA_SOP_CASOS)
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const casos = idsSeleccionados.length > 0
+    ? todosLosCasos.filter((caso) => idsSeleccionados.includes(texto(caso.id)))
+    : todosLosCasos;
 
   if (!rutaObjetivo) throw new Error('La definición no tiene pantalla objetivo resuelta.');
   if (pasos.length === 0) throw new Error('La definición no tiene pasos ejecutables compilados.');
@@ -139,7 +153,7 @@ async function ejecutarAprendizaje(aprendizaje) {
       { campo: 'ruta_objetivo', esperado: rutaObjetivo, actual: rutaObjetivo, estado: 'ok' },
       { campo: 'casos_ejecutados', esperado: casos.length, actual: corridas.length, estado: 'ok' },
     ],
-    detalle: `El agente operó ${rutaObjetivo} con ${corridas.length} caso(s) reales de Pantalla 3.`,
+    detalle: `El agente operó ${rutaObjetivo} con ${corridas.length} caso(s) reales.`,
   };
 }
 
@@ -226,11 +240,9 @@ async function revalidarCasos(casos) {
 }
 
 function datosDeCaso(caso) {
-  const contexto = objeto(caso.contexto);
-  const complementario = objeto(contexto.contexto_complementario);
-  const pantalla3 = objeto(complementario.pantalla_3);
-  const empleado = objeto(contexto.empleado);
-  return { ...empleado, ...pantalla3 };
+  const pantalla = pantallaPorOrigenCaso(caso);
+  if (!pantalla) return {};
+  return datosDesdeCaso(pantalla, caso).datos;
 }
 
 async function ejecutarPaso(paso, rutaObjetivo, caso, datos) {
@@ -267,6 +279,20 @@ async function ejecutarPaso(paso, rutaObjetivo, caso, datos) {
       }
       await aplicarEspera(paso);
       return `Eligió ${clave || selectorPaso} = ${valor}`;
+    }
+
+    // Un campo de solo lectura ya lo completó la pantalla sola (ej: el
+    // período que trae el dataset elegido). Forzar un fill ahí nunca
+    // termina: Playwright reintenta para siempre porque el campo nunca pasa
+    // a "editable". Se verifica en vez de escribir.
+    const soloLectura = await campo.evaluate((el) => Boolean(el.disabled || el.readOnly));
+    if (soloLectura) {
+      const actual = await campo.inputValue();
+      if (valor && actual !== valor) {
+        throw new Error(`El campo ${clave} es de solo lectura y quedó en "${actual}", se esperaba "${valor}".`);
+      }
+      await aplicarEspera(paso);
+      return `Ya estaba completo (solo lectura) ${clave || selectorPaso} = ${actual}`;
     }
 
     await campo.fill(valor);

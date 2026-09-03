@@ -472,6 +472,7 @@ export class QaSopLoomService {
   async ejecutar(
     idEntrada: string,
     modoEntrada: unknown,
+    casoIdsEntrada: unknown,
     cookieHeader?: string,
   ): Promise<Record<string, unknown>> {
     const doc = await this.buscar(idEntrada);
@@ -531,6 +532,16 @@ export class QaSopLoomService {
       });
     }
 
+    // Sin selección, corre todos los casos congelados (comportamiento de
+    // siempre). Con selección, el runner solo opera esos; si ninguno de los
+    // ids pedidos existe en el plan, es mejor avisar que correr todo igual.
+    const definicionCasos = this.arrayObjetos(this.objeto(doc.definicion_ejecutable)['casos']);
+    const idsDisponibles = new Set(definicionCasos.map((caso) => this.texto(caso['id'])));
+    const casoIdsSeleccionados = this.arrayTexto(casoIdsEntrada).filter((id) => idsDisponibles.has(id));
+    if (this.arrayTexto(casoIdsEntrada).length > 0 && casoIdsSeleccionados.length === 0) {
+      throw new BadRequestException('Ninguno de los casos seleccionados está en el plan aprobado.');
+    }
+
     const scriptPath = join(process.cwd(), 'scripts', 'run-qa-sop-loom-playwright.mjs');
     if (!existsSync(scriptPath)) {
       throw new InternalServerErrorException(`No encontré el runner SOP Loom en ${scriptPath}.`);
@@ -574,12 +585,12 @@ export class QaSopLoomService {
       modo,
       estado: 'corriendo',
       iniciada_en: iniciadaEn,
-      casos_count: this.arrayObjetos(definicion['casos']).length,
+      casos_count: casoIdsSeleccionados.length > 0 ? casoIdsSeleccionados.length : this.arrayObjetos(definicion['casos']).length,
     }).catch(() => undefined);
 
     const child = spawn(process.execPath, args, {
       cwd: process.cwd(),
-      env: this.envRunner(doc.id, modo),
+      env: this.envRunner(doc.id, modo, casoIdsSeleccionados),
       windowsHide: true,
     });
 
@@ -1775,11 +1786,13 @@ export class QaSopLoomService {
     return this.texto(valor) === 'borrador' ? 'borrador' : 'listo';
   }
 
-  private envRunner(aprendizajeId: string, modo: string): NodeJS.ProcessEnv {
+  private envRunner(aprendizajeId: string, modo: string, casoIds: string[] = []): NodeJS.ProcessEnv {
     const demo = modo === 'demo';
     return {
       ...process.env,
       AUDITORIA_QA_SOP_LEARNING: aprendizajeId,
+      // Vacío = corre todos los casos congelados (comportamiento de siempre).
+      AUDITORIA_QA_SOP_CASOS: casoIds.join(','),
       AUDITORIA_PLAYWRIGHT_DEMO: demo ? 'true' : 'false',
       PLAYWRIGHT_HEADLESS: demo ? 'false' : 'true',
       PLAYWRIGHT_SLOWMO_MS: demo ? process.env.PLAYWRIGHT_SLOWMO_MS ?? '1800' : '0',

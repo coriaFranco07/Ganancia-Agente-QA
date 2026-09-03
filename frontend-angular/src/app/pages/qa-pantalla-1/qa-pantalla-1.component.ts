@@ -152,7 +152,7 @@ interface CasoGuardadoLegacy {
                 (ngModelChange)="aplicarDatasetSeleccionado($event)"
               >
                 <option value="">{{ cargandoDatasets ? 'Cargando datasets...' : 'Seleccioná dataset' }}</option>
-                <option *ngFor="let dataset of datasets; trackBy: trackByDataset" [ngValue]="dataset.codigo">
+                <option *ngFor="let dataset of datasets; trackBy: trackByDataset" [value]="dataset.codigo">
                   {{ dataset.codigo }} · {{ dataset.periodo }} · {{ dataset.convenio }}
                 </option>
               </select>
@@ -214,14 +214,14 @@ interface CasoGuardadoLegacy {
             <label class="field">
               <span>Estado esperado</span>
               <select data-testid="qa-case-estado-select" [(ngModel)]="form.estadoEsperado" name="estadoEsperado">
-                <option *ngFor="let estado of estados" [ngValue]="estado.valor">{{ estado.texto }}</option>
+                <option *ngFor="let estado of estados" [value]="estado.valor">{{ estado.texto }}</option>
               </select>
             </label>
 
             <label class="field field-wide">
               <span>Campo a validar</span>
               <select data-testid="qa-case-campo-select" [(ngModel)]="form.resultado.campo" name="campoResultado">
-                <option *ngFor="let campo of camposResultado" [ngValue]="campo.valor">{{ campo.texto }}</option>
+                <option *ngFor="let campo of camposResultado" [value]="campo.valor">{{ campo.texto }}</option>
               </select>
             </label>
 

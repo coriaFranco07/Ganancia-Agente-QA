@@ -145,7 +145,7 @@ interface CapturaAbierta {
                 <td *ngFor="let campo of fuente.campos">{{ caso.datos[campo.clave] || '-' }}</td>
                 <td class="col-fecha">{{ fechaTexto(caso.actualizado) }}</td>
                 <td class="col-ejecucion" *ngIf="fuente.ejecutable">
-                  <span class="estado-pill" [ngClass]="estadoClase(caso.id)" *ngIf="ultimaEjecucion(caso.id) as ejecucion; else sinCorrer">
+                  <span class="estado-pill" [ngClass]="estadoClase(caso.id)" [title]="ejecucion.detalle" *ngIf="ultimaEjecucion(caso.id) as ejecucion; else sinCorrer">
                     {{ estadoTexto(ejecucion.estado) }}
                   </span>
                   <ng-template #sinCorrer>
@@ -796,8 +796,10 @@ export class QaCasosComponent implements OnInit, OnDestroy {
   }
 
   estadoTexto(estado: EstadoEjecucionQa): string {
-    if (estado === 'verde') return 'Verde';
-    if (estado === 'rojo') return 'Rojo';
+    // "Rojo" leía como si el agente se hubiera roto. La comparación corrió
+    // bien: lo que dice es si el valor calculado coincidió con el esperado.
+    if (estado === 'verde') return 'Correcto';
+    if (estado === 'rojo') return 'Incorrecto';
     return 'Corriendo';
   }
 

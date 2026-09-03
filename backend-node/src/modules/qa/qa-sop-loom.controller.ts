@@ -61,9 +61,10 @@ export class QaSopLoomController {
   ejecutar(
     @Param('id') id: string,
     @Body('modo') modo: unknown,
+    @Body('casoIds') casoIds: unknown,
     @Req() request: Request & { usuario?: unknown },
   ) {
-    return this.service.ejecutar(id, modo, request.headers.cookie);
+    return this.service.ejecutar(id, modo, casoIds, request.headers.cookie);
   }
 
   @Delete('aprendizajes/:id')
