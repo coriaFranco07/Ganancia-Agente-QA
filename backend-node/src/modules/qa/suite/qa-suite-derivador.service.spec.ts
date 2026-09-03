@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { CampoCatalogo } from '../qa-catalogo-elementos';
 import { PasoEjecutable } from '../qa-sop-loom.service';
 import { QaSuiteDerivadorService } from './qa-suite-derivador.service';
@@ -198,8 +199,11 @@ describe('QaSuiteDerivadorService', () => {
    */
   it('paridad: el motor en TS y su espejo en JS derivan exactamente los mismos escenarios', () => {
     const rutaEspejo = resolve(__dirname, '../../../../scripts/lib/qa-suite-derivador.mjs');
+    // El especificador de un import dinámico tiene que ser una URL de verdad:
+    // en Windows una ruta cruda ("D:\...") arranca con lo que el loader ESM
+    // lee como esquema "d:" y tira ERR_UNSUPPORTED_ESM_URL_SCHEME.
     const codigo = `
-      import { derivarEscenarios } from ${JSON.stringify(rutaEspejo)};
+      import { derivarEscenarios } from ${JSON.stringify(pathToFileURL(rutaEspejo).href)};
       const pasos = ${JSON.stringify(pasosCompletos)};
       const campos = ${JSON.stringify(camposCompletos)};
       const resultado = {};

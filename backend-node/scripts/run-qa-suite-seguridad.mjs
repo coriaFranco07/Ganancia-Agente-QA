@@ -221,8 +221,10 @@ async function frenteSesionApi(pasos) {
   const hallazgos = [];
   try {
     for (const endpoint of endpoints) {
+      // Al backend directo, no al frontend: el desvío de Angular a /login es
+      // código de cliente y no prueba nada del servidor real.
       const respuesta = await contextSinSesion.request
-        .post(`${cfg.frontendUrl}${endpoint}`, { data: {}, headers: { 'content-type': 'application/json' }, failOnStatusCode: false })
+        .post(`${cfg.apiOrigin}${endpoint}`, { data: {}, headers: { 'content-type': 'application/json' }, failOnStatusCode: false })
         .catch(() => null);
       if (!respuesta) continue;
       if (respuesta.status() !== 401 && respuesta.status() !== 403) {

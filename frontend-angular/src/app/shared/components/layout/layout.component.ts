@@ -36,15 +36,14 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
           </a>
 
           <button
-            mat-button
             type="button"
             class="menu-link menu-toggle"
             data-testid="nav-qa-toggle"
             [class.abierto]="qaAbierto"
             (click)="toggleQa()"
             aria-label="Abrir menú QA">
-            <mat-icon>science</mat-icon>
-            <span>QA</span>
+            <mat-icon class="toggle-icon">science</mat-icon>
+            <span class="toggle-label">QA</span>
             <mat-icon class="chevron">expand_more</mat-icon>
           </button>
 
@@ -163,9 +162,9 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
   `,
   styles: [`
     .layout-shell { height: 100vh; background: #f8fafc; }
-    .sidebar { width: 190px; border-right: 1px solid #1d4bd6; background: #2458fb; }
-    .brand { padding: 14px 12px 18px; }
-    .brand img { display: block; width: 138px; max-width: 100%; }
+    .sidebar { width: 260px; border-right: 1px solid #1d4bd6; background: #2458fb; }
+    .brand { display: flex; justify-content: center; padding: 20px 10px 24px; }
+    .brand img { display: block; width: 230px; max-width: 100%; height: auto; }
     .brand img.oculto { display: none; }
     .brand-fallback { display: inline-flex; align-items: center; gap: 8px; padding: 4px 2px; color: #ffffff; font-size: 18px; font-weight: 900; }
     .menu { display: flex; flex-direction: column; gap: 6px; padding: 0 8px; }
@@ -187,9 +186,43 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
     .menu-link mat-icon { margin-right: 10px; color: rgba(255, 255, 255, .7); font-size: 20px; width: 20px; height: 20px; }
     .menu-link.activo { background: rgba(255, 255, 255, .16); color: #ffffff !important; }
     .menu-link.activo mat-icon { color: #ffffff; }
+    .menu-toggle {
+      display: grid;
+      grid-template-columns: 20px 1fr 20px;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      border: 1px solid transparent;
+      background: transparent;
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: background-color 160ms ease, border-color 160ms ease;
+    }
+    .menu-toggle:hover,
+    .menu-toggle:focus-visible {
+      background: rgba(255, 255, 255, .1);
+      border-color: rgba(255, 255, 255, .14);
+      outline: none;
+    }
+    .menu-toggle.abierto {
+      background: rgba(255, 255, 255, .14);
+      border-color: rgba(255, 255, 255, .16);
+      color: #ffffff !important;
+    }
+    .menu-toggle .toggle-icon {
+      margin: 0;
+      color: rgba(255, 255, 255, .78);
+    }
+    .menu-toggle .toggle-label {
+      color: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1;
+    }
     .menu-toggle .chevron {
-      margin-left: auto;
-      margin-right: 0;
+      margin: 0;
+      color: rgba(255, 255, 255, .78);
       transition: transform 160ms ease;
     }
     .menu-toggle.abierto .chevron { transform: rotate(180deg); }
@@ -238,7 +271,8 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
       .toolbar { padding: 0 12px; }
       .usuario { display: none; }
       .logout span { display: none; }
-      .sidebar { width: min(82vw, 300px); }
+      .sidebar { width: min(88vw, 320px); }
+      .brand img { width: 270px; }
       .version { position: static; margin: 28px 20px 20px; padding-top: 18px; border-top: 1px solid rgba(255, 255, 255, .22); }
     }
   `],

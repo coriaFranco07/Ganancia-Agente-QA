@@ -31,6 +31,12 @@ function hayEntornoGrafico() {
 
 export function resolverConfigComun() {
   const frontendUrl = (process.env.AUDITORIA_FRONTEND_URL ?? 'http://localhost:4200').replace(/\/$/, '');
+  const apiUrl = (process.env.AUDITORIA_API_URL ?? 'http://localhost:8001/api').replace(/\/$/, '');
+  // Los `espera.valor` que compila SOP Loom ya traen el prefijo `/api/...`
+  // (ej: '/api/qa/casos'): pegarle el origen a esa cadena con `apiUrl` tal
+  // cual duplicaría el prefijo. `apiOrigin` es el origen puro (sin `/api`)
+  // para esos casos.
+  const apiOrigin = apiUrl.replace(/\/api$/, '');
   const mongodbUri =
     process.env.MONGODB_URI ?? process.env.AUDITORIA_MONGODB_URI ?? 'mongodb://127.0.0.1:27017/auditoria_ganancias';
   const correo = process.env.AUDITORIA_QA_CORREO ?? 'qa-local@auditoria.test';
@@ -58,6 +64,8 @@ export function resolverConfigComun() {
   const slowMoMs = Number(process.env.PLAYWRIGHT_SLOWMO_MS ?? (demoConEscritorio ? 1800 : 0));
   return {
     frontendUrl,
+    apiUrl,
+    apiOrigin,
     mongodbUri,
     correo,
     contrasena,
