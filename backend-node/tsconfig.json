@@ -15,5 +15,6 @@
     "strict": true,
     "strictPropertyInitialization": false,
     "esModuleInterop": true
-  }
+  },
+  "include": ["src/**/*.ts"]
 }

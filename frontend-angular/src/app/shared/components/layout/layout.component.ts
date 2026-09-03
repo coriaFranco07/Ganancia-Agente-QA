@@ -78,6 +78,15 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
             </a>
             <a
               mat-button
+              routerLink="/qa/pantalla-4"
+              routerLinkActive="activo"
+              class="submenu-link"
+              data-testid="nav-qa-pantalla-4"
+              (click)="cerrarMenuSiMobile()">
+              Suite de QA
+            </a>
+            <a
+              mat-button
               routerLink="/qa/sop-loom"
               routerLinkActive="activo"
               class="submenu-link"
@@ -219,7 +228,7 @@ import { AuthService, UsuarioAutenticado } from '../../../core/services/auth.ser
     .contenido { min-width: 0; background: #f8fafc; }
     .toolbar { position: sticky; top: 0; z-index: 20; min-height: 52px; height: 52px; padding: 0 24px; border-bottom: 1px solid #e2e8f0; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(10px); }
     .titulo { font-size: 16px; font-weight: 800; color: #0f172a; }
-    .boton-menu { display: none; margin-right: 8px; color: #2563eb; }
+    .boton-menu { display: none; margin-right: 8px; color: #2458fb; }
     .usuario { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; color: #475569; font-size: 12px; font-weight: 700; }
     .usuario mat-icon { font-size: 20px; width: 20px; height: 20px; }
     .logout { height: 36px; border-radius: 12px; color: #0f172a; font-weight: 900; }
